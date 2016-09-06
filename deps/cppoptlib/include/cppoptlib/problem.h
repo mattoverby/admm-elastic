@@ -3,11 +3,11 @@
 
 #include <Eigen/Dense>
 
-#if defined(MATLAB) || defined(NDEBUG)
 #define EXPECT_NEAR(x, y, z)
-#else
-#include "../gtest/gtest.h"
-#endif /* RELEASE MODE */
+//#if defined(MATLAB) || defined(NDEBUG)
+//#else
+//#include "../gtest/gtest.h"
+//#endif /* RELEASE MODE */
 
 #include "meta.h"
 
