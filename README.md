@@ -18,11 +18,20 @@ robustness of projective dynamics. We demonstrate these benefits on several exam
 BibTex:  
 
 	@inproceedings{Narain2016,
-		author = {Narain, Rahul and Overby, Matthew and Brown, George E.},
-		title = {{ADMM} $\supseteq$ Projective Dynamics: Fast Simulation of General Constitutive Models},
-		booktitle = {Proceedings of the ACM SIGGRAPH/Eurographics Symposium on Computer Animation},
-		year = {2016}
-	}
+	 author = {Narain, Rahul and Overby, Matthew and Brown, George E.},
+	 title = {{ADMM} $\supseteq$ Projective Dynamics: Fast Simulation of General Constitutive Models},
+	 booktitle = {Proceedings of the ACM SIGGRAPH/Eurographics Symposium on Computer Animation},
+	 series = {SCA '16},
+	 year = {2016},
+	 isbn = {978-3-905674-61-3},
+	 location = {Zurich, Switzerland},
+	 pages = {21--28},
+	 numpages = {8},
+	 url = {http://dl.acm.org/citation.cfm?id=2982818.2982822},
+	 acmid = {2982822},
+	 publisher = {Eurographics Association},
+	 address = {Aire-la-Ville, Switzerland, Switzerland},
+	} 
 
 # installation
 
@@ -34,7 +43,7 @@ ${ADMME_INCLUDE_DIRS} set as parent variables during the build.
 
 Copyright (c) 2016 University of Minnesota
 
-ADMM-Elastic Uses the BSD 2-Clause License (http://www.opensource.org/licenses/BSD-2-Clause)
+ADMM-Elastic Uses the BSD 2-Clause License (http://www.opensource.org/licenses/BSD-2-Clause)  
 Redistribution and use in source and binary forms, with or without modification, are
 permitted provided that the following conditions are met:  
 1. Redistributions of source code must retain the above copyright notice, this list of
