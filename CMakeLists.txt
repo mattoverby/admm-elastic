@@ -32,6 +32,7 @@ set( EIGEN_INCLUDE "${CMAKE_CURRENT_SOURCE_DIR}/deps/Eigen3" )
 include_directories( SYSTEM ${EIGEN_INCLUDE} ) # SYSTEM hushes warnings
 
 # OpenMP
+# Should add OMP nested, but will leave disabled (default) for now
 find_package(OpenMP)
 if (OPENMP_FOUND)
 	set (CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${OpenMP_C_FLAGS}")
