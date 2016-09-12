@@ -55,7 +55,7 @@ bool System::step( int solver_iters ){
 		Dx = m_D*curr_x;
 
 		// Local step (uses curr_x, and does zi and ui updates on each force)
-		#pragma omp parallel for
+#pragma omp parallel for
 		for( int i = 0; i < n_forces; ++i ){ forces[i]->update(timestep_s,Dx,curr_u,curr_z); }
 
 		// Global step (sets curr_x)
@@ -119,7 +119,7 @@ bool System::initialize( double timestep_ ){
 	// Compute local Di matrices in parallel.
 	// In the future we should avoid doing storing Di matrices on forces to
 	// reduce memory consumption.
-	#pragma omp parallel for
+#pragma omp parallel for
 	for(int i = 0; i < forces.size(); ++i){
 		forces[i]->initialize( m_x, m_v, m_masses, timestep_s );
 		forces[i]->computeDi( dof );
@@ -185,7 +185,7 @@ bool System::initialize( double timestep_ ){
 void System::recompute_weights(){
 
 	// Update the weight matrix
-	#pragma omp parallel for
+#pragma omp parallel for
 	for(int i = 0; i < forces.size(); ++i){
 		int Di_rows = forces[i]->getDi()->rows();
 		Eigen::VectorXd weights = Eigen::VectorXd::Ones(Di_rows)*forces[i]->weight;
