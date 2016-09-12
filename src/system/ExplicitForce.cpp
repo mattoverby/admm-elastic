@@ -30,7 +30,7 @@ void ExplicitForce::update( double dt, VectorXd &x, VectorXd &v, VectorXd &m ) c
 	int n_v = indices.size();
 	bool run_all = false;
 	if( n_v == 0 ){ n_v = v.size()/3; run_all=true; }
-	#pragma omp parallel for
+#pragma omp parallel for
 	for( int i=0; i<n_v; ++i ){
 		int idx = i;
 		if( !run_all ){ idx = indices[i]; }
@@ -46,7 +46,7 @@ void WindForce::update( double dt, VectorXd &x, VectorXd &v, VectorXd &m ) const
 
 	int n_tris = tris.size()/3;
 
-	#pragma omp parallel for
+#pragma omp parallel for
 	for( int i=0; i<n_tris; ++i ){
 
 		int idx[3] = { tris[i*3+0]*3, tris[i*3+1]*3, tris[i*3+2]*3 };
