@@ -59,7 +59,7 @@ void CollisionForce::handleCollisions(Eigen::VectorXd &zi, const Eigen::VectorXd
 	zi = collFreePositions;
 
 	// Nested omp threads
-	#pragma omp parallel for
+#pragma omp parallel for
 	for(int i = 0; i < zi.size(); i += 3){
 		Eigen::Vector3d point(zi[i],zi[i+1],zi[i+2]);
 
