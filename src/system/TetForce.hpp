@@ -249,7 +249,7 @@ public:
 		type = 0; if( type_=="stvk" || type_=="1" ){ type=1; }
 
 		// Set up the local solver
-		solver = std::shared_ptr< cppoptlib::ISolver<double, 1> >( new cppoptlib::lbfgssolver<double> );
+		solver = std::unique_ptr< cppoptlib::ISolver<double, 1> >( new cppoptlib::lbfgssolver<double> );
 		solver->settings_.maxIter = max_iterations;
 		solver->settings_.gradTol = 1e-8;
 		last_prox_result.resize(3,1.0);
@@ -261,7 +261,7 @@ public:
 
 	std::shared_ptr<NHProx> nhprox;
 	std::shared_ptr<StVKProx> stvkprox;
-	std::shared_ptr< cppoptlib::ISolver<double, 1> > solver;
+	std::unique_ptr< cppoptlib::ISolver<double, 1> > solver;
 
 	int idx[4];
 	int type;
