@@ -140,17 +140,22 @@ bool System::initialize( double timestep_ ){
 	// Building the global D and W matrices
 	// TODO: From triplets and combine with loop above instead of dense matrices
 	m_W_diag.resize( D_numRows );
-	Eigen::MatrixXd tempD( D_numRows, D_numCols ); tempD.setZero();
+	m_D = SparseMatrix<double>(D_numRows, D_numCols);
+	std::vector< Eigen::Triplet<double> > triplets;
 	int curr_row = 0;
 	for(int i = 0; i < forces.size(); ++i){
 		int numDiRows = forces[i]->getDi()->rows();
-		tempD.block( curr_row, 0, numDiRows, D_numCols ) = *forces[i]->getDi();
+		for (int k=0; k < forces[i]->getDi()->outerSize(); ++k) {
+			for (Eigen::SparseMatrix<double>::InnerIterator it(*forces[i]->getDi(), k); it; ++it) {
+			    triplets.push_back(Eigen::Triplet<double>(it.row()+curr_row, it.col(), it.value()));
+		  	}
+		}
 		for( int j=0; j<numDiRows; ++j ){ m_W_diag[ curr_row + j ] = forces[i]->weight; }
 		curr_row += numDiRows;
 	}
 
 	// Use transpose of D as well
-	m_D = tempD.sparseView();
+	m_D.setFromTriplets(triplets.begin(), triplets.end());
 	SparseMatrix<double> Dt = m_D.transpose();
 
 	// Compute mass matrix
