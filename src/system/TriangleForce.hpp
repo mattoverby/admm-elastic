@@ -38,6 +38,7 @@ public:
 	int id0, id1, id2;
 	double stiffness, limit_min, limit_max;
 	Eigen::Matrix<double,3,2> B;
+	double area;
 
 }; // end class limited triangle strain
 
@@ -57,6 +58,7 @@ public:
 	int id0, id1, id2;
 	double stiffness, limit_min, limit_max;
 	Eigen::Matrix<double,3,2> B;
+	double area;
 
 }; // end class limited triangle strain
 

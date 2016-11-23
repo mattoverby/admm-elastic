@@ -58,7 +58,8 @@ void LimitedTriangleStrain::initialize( const VectorXd &x, const VectorXd &v, co
 	
 	B = D * Xg.inverse();
 
-	weight = sqrt(stiffness);
+	area = std::abs((basis.transpose() * edges).determinant() / 2.0f);
+	weight = sqrt(stiffness)*sqrt(area);
 
 }
 
@@ -133,23 +134,18 @@ void LimitedTriangleStrain::update( double dt, const VectorXd &Dx, VectorXd &u, 
 	// Constructing the matrix T
 	Matrix<double,3,2> T;
 	T = svd.matrixU() * Diag * svd.matrixV().transpose();
-	
-	
-	// Projection p is computed
-	double areaTerm = 1.0;
-	//double areaTerm = std::sqrt(std::abs((basis.transpose() * edges).determinant() / 2.0f));
-	
-	Matrix<double,3,2> proj = areaTerm * T;
+		
 	VectorXd p(6);
-	p(0) = proj(0,0);
-	p(1) = proj(1,0);
-	p(2) = proj(2,0);
-	p(3) = proj(0,1);
-	p(4) = proj(1,1);
-	p(5) = proj(2,1);
+	p(0) = T(0,0);
+	p(1) = T(1,0);
+	p(2) = T(2,0);
+	p(3) = T(0,1);
+	p(4) = T(1,1);
+	p(5) = T(2,1);
 	
-	// zi and ui updates
-	VectorXd zi = ( 1.0 / (weight*weight + stiffness) ) * (stiffness*p + weight*weight*(DixPlusUi));
+	// Update zi and ui
+	double k = stiffness*area;
+	VectorXd zi = ( k*p + weight*weight*(DixPlusUi) ) / ( weight*weight + k );
 
 	// Construct a corresponding 3x2 Zi matrix from 6x1 zi vector
 	Matrix<double,3,2> Zi;
@@ -228,7 +224,8 @@ void PDTriangleStrain::initialize( const VectorXd &x, const VectorXd &v, const V
 	
 	B = D * Xg.inverse();
 
-	weight = sqrt(stiffness);
+	area = std::abs((basis.transpose() * edges).determinant() / 2.0f);
+	weight = sqrt(stiffness)*sqrt(area);
 
 }
 
@@ -314,23 +311,18 @@ void PDTriangleStrain::update( double dt, const VectorXd &Dx, VectorXd &u, Vecto
 	// Constructing the matrix T
 	Matrix<double,3,2> T;
 	T = svd.matrixU() * Diag * svd.matrixV().transpose();
-	
-	
-	// Projection p is computed
-	double areaTerm = 1.0;
-	//double areaTerm = std::sqrt(std::abs((basis.transpose() * edges).determinant() / 2.0f));
-	
-	Matrix<double,3,2> proj = areaTerm * T;
+		
 	VectorXd p(6);
-	p(0) = proj(0,0);
-	p(1) = proj(1,0);
-	p(2) = proj(2,0);
-	p(3) = proj(0,1);
-	p(4) = proj(1,1);
-	p(5) = proj(2,1);
+	p(0) = T(0,0);
+	p(1) = T(1,0);
+	p(2) = T(2,0);
+	p(3) = T(0,1);
+	p(4) = T(1,1);
+	p(5) = T(2,1);
 	
-	// zi and ui updates
-	VectorXd zi = ( 1.0 / (weight*weight + stiffness) ) * (stiffness*p + weight*weight*(DixPlusUi));
+	// Update zi and ui
+	double k = stiffness*area;
+	VectorXd zi = ( k*p + weight*weight*(DixPlusUi) ) / ( weight*weight + k );
 	
 	// update u and z
 	ui += ( Dix - zi );
