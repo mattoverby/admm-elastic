@@ -104,58 +104,26 @@ void LimitedTriangleStrain::computeDi( int dof ){
 
 void LimitedTriangleStrain::update( double dt, const VectorXd &Dx, VectorXd &u, VectorXd &z ) const {
 
-	int Di_rows = getDi()->rows();
-	VectorXd Dix = Dx.segment( global_idx, Di_rows );
-	VectorXd ui = u.segment( global_idx, Di_rows );
-	VectorXd DixPlusUi = Dix+ui;
+	typedef Matrix<double,6,1> Vector6d;
+	Vector6d Dix = Dx.segment<6>( global_idx );
+	Vector6d ui = u.segment<6>( global_idx );
+	Vector6d DixPlusUi = Dix+ui;
 
 	// Computing F (rearranging terms from 6x1 vector AixPlusUi to make a 3x2)
-	Matrix<double,3,2> F;
-	F(0,0) = DixPlusUi(0);
-	F(1,0) = DixPlusUi(1);
-	F(2,0) = DixPlusUi(2);
-	F(0,1) = DixPlusUi(3);
-	F(1,1) = DixPlusUi(4);
-	F(2,1) = DixPlusUi(5);
+	Matrix<double,3,2> F = Map<Matrix<double,3,2> >(DixPlusUi.data());
 		
 	// Compute the singular value decomposition
-	JacobiSVD<Matrix<double,3,2> > svd(F, ComputeFullU | ComputeFullV);
-	
-	// Setting the singular values to 1
-	Vector2d S = svd.singularValues();
-	S(0) = 1.0;
-	S(1) = 1.0;
-	
-	// Creating a 3x2 matrix with the (0,0) and (1,1) entries being the tweaked singular values
-	Matrix<double,3,2> Diag;
-	Diag.setZero();
-	Diag.block<2,2>(0,0) = S.asDiagonal();
+	JacobiSVD<Matrix<double,3,2> > svd(F, ComputeThinU | ComputeThinV);
 	
 	// Constructing the matrix T
-	Matrix<double,3,2> T;
-	T = svd.matrixU() * Diag * svd.matrixV().transpose();
+	Matrix<double,3,2> T = svd.matrixU().leftCols<2>() * svd.matrixV().transpose();
 		
-	VectorXd p(6);
-	p(0) = T(0,0);
-	p(1) = T(1,0);
-	p(2) = T(2,0);
-	p(3) = T(0,1);
-	p(4) = T(1,1);
-	p(5) = T(2,1);
+	Vector6d p = Map<Vector6d>(T.data());
 	
 	// Update zi and ui
 	double k = stiffness*area;
-	VectorXd zi = ( k*p + weight*weight*(DixPlusUi) ) / ( weight*weight + k );
+	Vector6d zi = ( k*p + weight*weight*(DixPlusUi) ) / ( weight*weight + k );
 
-	// Construct a corresponding 3x2 Zi matrix from 6x1 zi vector
-	Matrix<double,3,2> Zi;
-	Zi(0,0) = zi(0);
-	Zi(1,0) = zi(1);
-	Zi(2,0) = zi(2);
-	Zi(0,1) = zi(3);
-	Zi(1,1) = zi(4);
-	Zi(2,1) = zi(5);
-	
 	//std::cout << "Zi is .. \n" << Zi << std::endl;
 	
 	// Divide out the weight
@@ -166,25 +134,16 @@ void LimitedTriangleStrain::update( double dt, const VectorXd &Dx, VectorXd &u, 
 //instead of taking the SVD of F and limiting its singular values, just
 //scale the columns of F so their lengths lie in the specified range.
 
-	double l_col0 = Zi.col(0).norm();
-	double l_col1 = Zi.col(1).norm();
-	if( l_col0 < limit_min ){ Zi.col(0) *= ( limit_min / fmaxf( l_col0, 1e-6 ) ); }
-	if( l_col1 < limit_min ){ Zi.col(1) *= ( limit_min / fmaxf( l_col1, 1e-6 ) ); }
-	if( l_col0 > limit_max ){ Zi.col(0) *= ( limit_max / fmaxf( l_col0, 1e-6 ) ); }
-	if( l_col1 > limit_max ){ Zi.col(1) *= ( limit_max / fmaxf( l_col1, 1e-6 ) ); }
-	
-	// Re-building zi from Zi
-	zi(0) = Zi(0,0);
-	zi(1) = Zi(1,0);
-	zi(2) = Zi(2,0);
-	zi(3) = Zi(0,1);
-	zi(4) = Zi(1,1);
-	zi(5) = Zi(2,1);   
+	double l_col0 = zi.head<3>().norm();
+	double l_col1 = zi.tail<3>().norm();
+	if( l_col0 < limit_min ){ zi.head<3>() *= ( limit_min / fmaxf( l_col0, 1e-6 ) ); }
+	if( l_col1 < limit_min ){ zi.tail<3>() *= ( limit_min / fmaxf( l_col1, 1e-6 ) ); }
+	if( l_col0 > limit_max ){ zi.head<3>() *= ( limit_max / fmaxf( l_col0, 1e-6 ) ); }
+	if( l_col1 > limit_max ){ zi.tail<3>() *= ( limit_max / fmaxf( l_col1, 1e-6 ) ); }
 	
 	// update u and z
-	ui += ( Dix - zi );
-	u.segment( global_idx, Di_rows ) = ui;
-	z.segment( global_idx, Di_rows ) = zi;
+	ui.noalias() += ( Dix - zi );
+	z.segment<6>( global_idx ) = zi;
 }
 
 
