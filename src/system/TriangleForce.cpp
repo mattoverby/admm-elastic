@@ -143,6 +143,7 @@ void LimitedTriangleStrain::update( double dt, const VectorXd &Dx, VectorXd &u, 
 	
 	// update u and z
 	ui.noalias() += ( Dix - zi );
+	u.segment<6>( global_idx ) = ui;
 	z.segment<6>( global_idx ) = zi;
 }
 
