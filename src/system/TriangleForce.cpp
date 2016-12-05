@@ -113,7 +113,7 @@ void LimitedTriangleStrain::update( double dt, const VectorXd &Dx, VectorXd &u, 
 	Matrix<double,3,2> F = Map<Matrix<double,3,2> >(DixPlusUi.data());
 		
 	// Compute the singular value decomposition
-	JacobiSVD<Matrix<double,3,2> > svd(F, ComputeThinU | ComputeThinV);
+	JacobiSVD<Matrix<double,3,2> > svd(F, ComputeFullU | ComputeFullV);
 	
 	// Constructing the matrix T
 	Matrix<double,3,2> T = svd.matrixU().leftCols<2>() * svd.matrixV().transpose();
