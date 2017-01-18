@@ -213,7 +213,8 @@ double NHProx::energyDensity( const cppoptlib::Vector<double> &Sigma ) const {
 
 // Compute objective function (prox operator)
 double NHProx::value(const cppoptlib::Vector<double> &x) {
-	if( x[0]<0.0 || x[1]<0.0 || x[2]<0.0 ){ return std::numeric_limits<double>::infinity(); }
+	// Return max float (large number) that won't cause nans
+	if( x[0]<0.0 || x[1]<0.0 || x[2]<0.0 ){ return std::numeric_limits<float>::max(); }
 	double r = energyDensity( x );
 	double r2 = (k*0.5) * (x-Sigma_init).squaredNorm();
 	return ( scaleConst*r + r2 );
@@ -223,7 +224,7 @@ void NHProx::gradient(const cppoptlib::Vector<double> &x, cppoptlib::Vector<doub
 	double detSigma = x[0]*x[1]*x[2];
 	if( detSigma <= 0.0 ){
 //		grad.setZero();
-		grad = VectorXd::Ones(3) * std::numeric_limits<double>::infinity();
+		grad = VectorXd::Ones(3) * std::numeric_limits<float>::max();
 	} else {
 		Eigen::Vector3d invSigma(1.0/x[0],1.0/x[1],1.0/x[2]);
 		grad = scaleConst*(mu * (x - invSigma) + lambda * log(detSigma) * invSigma) + k*(x-Sigma_init);
@@ -267,7 +268,8 @@ double StVKProx::energyDensity( Vector3d &Sigma ) const {
 
 // Compute objective function (prox operator)
 double StVKProx::value(const cppoptlib::Vector<double> &x) {
-	if( x[0]<0.0 || x[1]<0.0 || x[2]<0.0 ){ return std::numeric_limits<double>::infinity(); }
+	// Return max float (large number) that won't cause nans
+	if( x[0]<0.0 || x[1]<0.0 || x[2]<0.0 ){ return std::numeric_limits<float>::max(); }
 	Eigen::Vector3d Sigma(x[0],x[1],x[2]);
 	double r = energyDensity( Sigma );
 	double r2 = (k*0.5) * (Sigma-this->Sigma_init).squaredNorm();

@@ -252,7 +252,8 @@ public:
 		solver = std::unique_ptr< cppoptlib::ISolver<double, 1> >( new cppoptlib::lbfgssolver<double> );
 		solver->settings_.maxIter = max_iterations;
 		solver->settings_.gradTol = 1e-8;
-		last_prox_result.resize(3,1.0);
+		last_prox_result.resize(3);
+		last_prox_result.fill(1.0);
 	}
 
 	void initialize( const Eigen::VectorXd &x, const Eigen::VectorXd &v, const Eigen::VectorXd &masses, const double timestep );
