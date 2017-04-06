@@ -30,7 +30,6 @@ namespace admm {
 
 class LinearTetStrain : public Force {
 public:
-	// If weight scale <= 0, the optimal-weight function is used (helper::tet_weight)
 	LinearTetStrain( int idx0_, int idx1_, int idx2_, int idx3_, double stiffness_, double weight_scale_=1.f ) :
 		stiffness(stiffness_), volume(0.0), weight_scale(weight_scale_)
 		{ idx[0]=idx0_; idx[1]=idx1_; idx[2]=idx2_; idx[3]=idx3_; }
@@ -52,7 +51,6 @@ public:
 //
 class TetVolume : public Force {
 public:
-	// If weight scale <= 0, the optimal-weight function is used (helper::tet_weight)
 	TetVolume( int idx0_, int idx1_, int idx2_, int idx3_, double stiffness_, double limit_min_, double limit_max_ ) :
 		stiffness(stiffness_), rest_volume(0.0), limit_min(limit_min_), limit_max(limit_max_) { idx[0]=idx0_; idx[1]=idx1_; idx[2]=idx2_; idx[3]=idx3_; }
 
@@ -66,7 +64,7 @@ public:
 	double limit_min, limit_max;
 	Eigen::Matrix<double,4,3> B;
 
-}; // end class LinearTetStrain
+}; // end class TetVolume
 
 //
 //	NeoHookean Hyper Elastic
