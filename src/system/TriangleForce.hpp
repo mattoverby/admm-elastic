@@ -43,7 +43,7 @@ public:
 
 }; // end class limited triangle strain
 
-// Proximal Operator for StVK
+// Proximal Operator for Fung
 class FungProx : public cppoptlib::Problem<double> {
 public:
 	FungProx(double mu_, double k_ ) : mu(mu_), b(1.0), k(k_) {}
