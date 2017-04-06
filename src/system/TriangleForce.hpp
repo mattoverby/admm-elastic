@@ -1,4 +1,4 @@
-// Copyright (c) 2016, University of Minnesota
+// Copyright (c) 2017, University of Minnesota
 // 
 // lbfgssolver Uses the BSD 2-Clause License (http://www.opensource.org/licenses/BSD-2-Clause)
 // Redistribution and use in source and binary forms, with or without modification, are
@@ -29,39 +29,65 @@ namespace admm {
 //
 class LimitedTriangleStrain : public Force {
 public:
-	LimitedTriangleStrain( int id0_, int id1_, int id2_, double stiffness_, double limit_min_, double limit_max_ ) :
-		id0(id0_), id1(id1_), id2(id2_), stiffness(stiffness_), limit_min(limit_min_), limit_max(limit_max_) {}
-	void initialize( const Eigen::VectorXd &x, const Eigen::VectorXd &v, const Eigen::VectorXd &masses, const double timestep );
-	void computeDi( int dof );
-	void update( double dt, const Eigen::VectorXd &Dx, Eigen::VectorXd &u, Eigen::VectorXd &z ) const;
+	LimitedTriangleStrain( int id0_, int id1_, int id2_, double stiffness_, double limit_min_, double limit_max_, bool strain_limiting_=true ) :
+		id0(id0_), id1(id1_), id2(id2_), stiffness(stiffness_), limit_min(limit_min_), limit_max(limit_max_), strain_limiting(strain_limiting_) {}
+	virtual void initialize( const Eigen::VectorXd &x, const Eigen::VectorXd &v, const Eigen::VectorXd &masses, const double timestep );
+	virtual void get_selector( const Eigen::VectorXd &x, std::vector< Eigen::Triplet<double> > &triplets, std::vector<double> &weights );
+	virtual void project( double dt, const Eigen::VectorXd &Dx, Eigen::VectorXd &u, Eigen::VectorXd &z ) const;
 
 	int id0, id1, id2;
 	double stiffness, limit_min, limit_max;
 	Eigen::Matrix<double,3,2> B;
 	double area;
+	bool strain_limiting;
 
 }; // end class limited triangle strain
 
-
-
-//
-//	PDTriangleStrain (projective dynamics style)
-//
-class PDTriangleStrain : public Force {
+// Proximal Operator for StVK
+class FungProx : public cppoptlib::Problem<double> {
 public:
-	PDTriangleStrain( int id0_, int id1_, int id2_, double stiffness_, double limit_min_, double limit_max_ ) :
-		id0(id0_), id1(id1_), id2(id2_), stiffness(stiffness_), limit_min(limit_min_), limit_max(limit_max_) {}
-	void initialize( const Eigen::VectorXd &x, const Eigen::VectorXd &v, const Eigen::VectorXd &masses, const double timestep );
-	void computeDi( int dof );
-	void update( double dt, const Eigen::VectorXd &Dx, Eigen::VectorXd &u, Eigen::VectorXd &z ) const;
+	FungProx(double mu_, double k_ ) : mu(mu_), b(1.0), k(k_) {}
+	void setSigma0( const Eigen::Vector2d &Sigma_init_ ){ Sigma_init=Sigma_init_; }
 
+	inline double energyDensity( Eigen::Vector3d &Sigma ) const;
+	double value(const cppoptlib::Vector<double> &x);
+	void gradient(const cppoptlib::Vector<double> &x, cppoptlib::Vector<double> &grad);
+	Eigen::Vector2d Sigma_init;
+	double mu, b, k;
+
+}; // end class StVKProx
+
+//
+//	FungTriangle for Skin
+//
+class FungTriangle : public Force {
+public:
+	FungTriangle( int id0_, int id1_, int id2_, double mu_, double limit_min_, double limit_max_ ) :
+		id0(id0_), id1(id1_), id2(id2_), mu(mu_), limit_min(limit_min_), limit_max(limit_max_) {
+		solver = std::unique_ptr< cppoptlib::ISolver<double, 1> >( new cppoptlib::lbfgssolver<double> );
+		solver->settings_.maxIter = 10;
+		solver->settings_.gradTol = 1e-6;
+	}
+	void initialize( const Eigen::VectorXd &x, const Eigen::VectorXd &v, const Eigen::VectorXd &masses, const double timestep );
+	void get_selector( const Eigen::VectorXd &x, std::vector< Eigen::Triplet<double> > &triplets, std::vector<double> &weights );
+	void project( double dt, const Eigen::VectorXd &Dx, Eigen::VectorXd &u, Eigen::VectorXd &z ) const;
+
+	std::unique_ptr< cppoptlib::ISolver<double, 1> > solver;
+	std::unique_ptr<FungProx> fungprox;
 	int id0, id1, id2;
-	double stiffness, limit_min, limit_max;
-	Eigen::Matrix<double,3,2> B;
+	double mu, limit_min, limit_max;
 	double area;
+	Eigen::Matrix<double,3,2> B;
 
 }; // end class limited triangle strain
 
+class TriArea : public LimitedTriangleStrain {
+public:
+	TriArea( int id0_, int id1_, int id2_, double stiffness_, int iters_, double limit_min_, double limit_max_ ) :
+		LimitedTriangleStrain( id0_, id1_, id2_, stiffness_, limit_min_, limit_max_ ), iters(iters_) {}
+	void project( double dt, const Eigen::VectorXd &Dx, Eigen::VectorXd &u, Eigen::VectorXd &z ) const;
+	int iters;
+};
 
 } // end namespace admm
 

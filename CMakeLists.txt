@@ -58,11 +58,11 @@ set( ADMME_SRCS
 	src/system/AnchorForce.hpp		src/system/AnchorForce.cpp
 	src/system/TetForce.hpp			src/system/TetForce.cpp
 	src/system/BendForce.hpp		src/system/BendForce.cpp
-	src/system/CollisionForce.hpp      	src/system/CollisionForce.cpp
+	src/system/CollisionForce.hpp		src/system/CollisionForce.cpp
 	src/collision/CollisionShape.hpp
-	src/collision/CollisionCylinder.hpp   	src/collision/CollisionCylinder.cpp
-	src/collision/CollisionSphere.hpp     	src/collision/CollisionSphere.cpp
-	src/collision/CollisionFloor.hpp      	src/collision/CollisionFloor.cpp
+	src/collision/CollisionCylinder.hpp
+	src/collision/CollisionSphere.hpp
+	src/collision/CollisionFloor.hpp
 )
 
 # Finally, create the library

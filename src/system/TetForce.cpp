@@ -1,4 +1,4 @@
-// Copyright (c) 2016, University of Minnesota
+// Copyright (c) 2017, University of Minnesota
 // 
 // ADMM-Elastic Uses the BSD 2-Clause License (http://www.opensource.org/licenses/BSD-2-Clause)
 // Redistribution and use in source and binary forms, with or without modification, are
@@ -22,6 +22,88 @@
 using namespace admm;
 using namespace Eigen;
 
+namespace admm {
+namespace helper {
+
+	static inline void init_tet_force( int *idx, const Eigen::VectorXd &x, double &volume, Eigen::Matrix<double,4,3> &B, Eigen::Matrix<double,3,3> &edges_inv ){
+		using namespace Eigen;
+
+		// Edge matrix
+		Matrix<double,3,3> edges;
+		Vector3d v0( x[ idx[0]*3 ], x[ idx[0]*3+1 ], x[ idx[0]*3+2 ] );
+		Vector3d v1( x[ idx[1]*3 ], x[ idx[1]*3+1 ], x[ idx[1]*3+2 ] );
+		Vector3d v2( x[ idx[2]*3 ], x[ idx[2]*3+1 ], x[ idx[2]*3+2 ] );
+		Vector3d v3( x[ idx[3]*3 ], x[ idx[3]*3+1 ], x[ idx[3]*3+2 ] );
+		edges.col(0) = v1 - v0;
+		edges.col(1) = v2 - v0;
+		edges.col(2) = v3 - v0;
+		edges_inv = edges.inverse();
+
+		// Xg is beginning state		
+		Matrix<double,3,3> Xg = edges;
+
+		// D matrix is I dunno
+		Matrix<double,4,3> D;
+		D(0,0) = -1; D(0,1) = -1; D(0,2) = -1;
+		D(1,0) =  1; D(1,1) =  0; D(1,2) =  0;
+		D(2,0) =  0; D(2,1) =  1; D(2,2) =  0;
+		D(3,0) =  0; D(3,1) =  0; D(3,2) =  1;
+
+		// B is used to create Ai
+		B = D * Xg.inverse();
+
+		// Volume is used for weight
+		volume = fabs( (v0-v3).dot( (v1-v3).cross(v2-v3) ) ) / 6.0;
+	}
+
+	static inline void init_tet_Di( int *idx, const Eigen::Matrix<double,4,3> &B, const int dof, std::vector<Eigen::Triplet<double> > &triplets ){
+		using namespace Eigen;
+		int constraint_idx = triplets.size();
+		Matrix<double,3,4> Bt = B.transpose();
+		const int col0 = 3 * idx[0];
+		const int col1 = 3 * idx[1];
+		const int col2 = 3 * idx[2];
+		const int col3 = 3 * idx[3];
+		const int rows[3] = { 0, 3, 6 };
+		const int cols[4] = { col0, col1, col2, col3 };
+		for( int r=0; r<3; ++r ){
+			for( int c=0; c<4; ++c ){
+				double value = Bt(r,c);
+				for( int j=0; j<3; ++j ){
+					triplets.push_back( Eigen::Triplet<double>(rows[r]+j+constraint_idx,cols[c]+j,value) );
+				}
+			}
+		}
+	}
+
+	// Projection, Singular Values, SVD's U, SVD's V transpose
+	static inline void oriented_svd( const Eigen::Matrix3d &F, Eigen::Vector3d &S, Eigen::Matrix3d &U, Eigen::Matrix3d &Vt ){
+		using namespace Eigen;
+
+		JacobiSVD< Matrix3d > svd( F, ComputeFullU | ComputeFullV );
+		S = svd.singularValues();
+		U = svd.matrixU();
+		Vt = svd.matrixV().transpose();
+
+		Matrix3d J = Matrix3d::Identity(); J(2,2)=-1.0;
+
+		// Check for inversion: U
+		if( U.determinant() < 0.0 ){
+			U = U * J;
+			S[2] *= -1.0;
+		}
+
+		// Check for inversion: V
+		if( Vt.determinant() < 0.0 ){
+			Vt = J * Vt;
+			S[2] *= -1.0;
+		}
+
+	} // end oriented svd
+
+}
+}
+
 //
 //	LinearTetStrain
 //
@@ -31,169 +113,100 @@ void LinearTetStrain::initialize( const VectorXd &x, const VectorXd &v, const Ve
 	helper::init_tet_force( idx, x, volume, B, edges_inv );
 
 	// Calculate weight
-	weight = sqrtf(stiffness)*sqrtf(volume) * weight_scale;
+	weight = sqrtf(stiffness)*sqrtf(volume);// * weight_scale;
 }
 
-void LinearTetStrain::computeDi( int dof ){
-	SparseMatrix<double> newDi;
-	helper::init_tet_Di( idx, B, dof, newDi );
-	setDi( newDi );
+void LinearTetStrain::get_selector( const Eigen::VectorXd &x, std::vector< Eigen::Triplet<double> > &triplets, std::vector<double> &weights ){
+	global_idx = weights.size();
+	helper::init_tet_Di( idx, B, x.size(), triplets );
+	for( int i=global_idx; i<triplets.size(); ++i ){
+		weights.push_back( weight );
+	}
 }
 
-void LinearTetStrain::update( double dt, const VectorXd &Dx, VectorXd &u, VectorXd &z ) const {
-
-	// Computing Di * x + ui
-	int Di_rows = getDi()->rows();
-	VectorXd Dix = Dx.segment( global_idx, Di_rows );
-	VectorXd ui = u.segment( global_idx, Di_rows );
-	VectorXd DixPlusUi = Dix + ui;
+void LinearTetStrain::project( double dt, const VectorXd &Dx, VectorXd &u, VectorXd &z ) const {
+	typedef Matrix<double,9,1> Vector9d;
+	Vector9d Dix = Dx.segment<9>( global_idx );
+	Vector9d ui = u.segment<9>( global_idx );
+	Vector9d DixPlusUi = Dix+ui;
 
 	// Computing F (rearranging terms from 9x1 vector DixPlusUi to make a 3x3)
-	Matrix<double,3,3> F;
-	F(0,0) = DixPlusUi(0); F(1,0) = DixPlusUi(1); F(2,0) = DixPlusUi(2);
-	F(0,1) = DixPlusUi(3); F(1,1) = DixPlusUi(4); F(2,1) = DixPlusUi(5);
-	F(0,2) = DixPlusUi(6); F(1,2) = DixPlusUi(7); F(2,2) = DixPlusUi(8);
+	Matrix<double,3,3> F = Map<Matrix<double,3,3> >(DixPlusUi.data());
 
 	// Get some singular values
 	JacobiSVD< Matrix<double,3,3> > svd(F, ComputeFullU | ComputeFullV);
 	Vector3d S = svd.singularValues();
-
 	S[0]=1.0;S[1]=1.0;S[2]=1.0;
-
 	if( F.determinant() < 0.0 ){ S[2] = -1.0; }
 
 	// Reconstruct with new singular values
 	Matrix<double,3,3> proj = svd.matrixU() * S.asDiagonal() * svd.matrixV().transpose();
-
-	// Proj needs to be 9d vector
-	VectorXd p; p.resize(9);
-	p(0) = proj(0,0); p(3) = proj(0,1); p(6) = proj(0,2);
-	p(1) = proj(1,0); p(4) = proj(1,1); p(7) = proj(1,2);
-	p(2) = proj(2,0); p(5) = proj(2,1); p(8) = proj(2,2);
+	Vector9d p = Map<Vector9d>(proj.data());
 
 	// Update zi and ui
 	double k = stiffness*volume;
-	VectorXd zi = ( k*p + weight*weight*(DixPlusUi) ) / (weight*weight + k);
+	Vector9d zi = ( k*p + weight*weight*(DixPlusUi) ) / (weight*weight + k);
 
-	ui += ( Dix - zi );
-
-	u.segment( global_idx, Di_rows ) = ui;
-	z.segment( global_idx, Di_rows ) = zi;
-
+	ui.noalias() += ( Dix - zi );
+	u.segment<9>( global_idx ) = ui;
+	z.segment<9>( global_idx ) = zi;
 }
 
 //
 // LinearTetVolume
 //
 
-void LinearTetVolume::initialize( const VectorXd &x, const VectorXd &v, const VectorXd &masses, const double timestep ){
-	helper::init_tet_force( idx, x, volume, B, edges_inv );
-	weight = sqrtf(stiffness)*sqrtf(volume);
+
+void TetVolume::initialize( const VectorXd &x, const VectorXd &v, const VectorXd &masses, const double timestep ){
+	helper::init_tet_force( idx, x, rest_volume, B, edges_inv );
+	weight = sqrtf(stiffness)*sqrtf(rest_volume);// * weight_scale;
 }
 
-void LinearTetVolume::computeDi( int dof ){
-	SparseMatrix<double> newDi;
-	helper::init_tet_Di( idx, B, dof, newDi );
-	setDi( newDi );
+void TetVolume::get_selector( const Eigen::VectorXd &x, std::vector< Eigen::Triplet<double> > &triplets, std::vector<double> &weights ){
+	global_idx = weights.size();
+	helper::init_tet_Di( idx, B, x.size(), triplets );
+	for( int i=global_idx; i<triplets.size(); ++i ){
+		weights.push_back( weight );
+	}
 }
 
-void LinearTetVolume::update( double dt, const VectorXd &Dx, VectorXd &u, VectorXd &z ) const {
+void TetVolume::project( double dt, const VectorXd &Dx, VectorXd &u, VectorXd &z ) const {
 
-	// Computing Di * x + ui
-	int Di_rows = getDi()->rows();
-	VectorXd Dix = Dx.segment( global_idx, Di_rows );
-	VectorXd ui = u.segment( global_idx, Di_rows );
-	VectorXd DixPlusUi = Dix + ui;
+	typedef Matrix<double,9,1> Vector9d;
+	Vector9d Dix = Dx.segment<9>( global_idx );
+	Vector9d ui = u.segment<9>( global_idx );
+	Vector9d DixPlusUi = Dix+ui;
 
 	// Computing F (rearranging terms from 9x1 vector DixPlusUi to make a 3x3)
-	Matrix<double,3,3> F;
-	F(0,0) = DixPlusUi(0); F(1,0) = DixPlusUi(1); F(2,0) = DixPlusUi(2);
-	F(0,1) = DixPlusUi(3); F(1,1) = DixPlusUi(4); F(2,1) = DixPlusUi(5);
-	F(0,2) = DixPlusUi(6); F(1,2) = DixPlusUi(7); F(2,2) = DixPlusUi(8);
+	Matrix<double,3,3> F = Map<Matrix<double,3,3> >(DixPlusUi.data());
 
 	// Get some singular values
 	JacobiSVD< Matrix<double,3,3> > svd(F, ComputeFullU | ComputeFullV);
 	Vector3d S = svd.singularValues();
 	Eigen::Vector3d d(0,0,0);
-	
-	for(int i = 0; i < 4; i++){
 
+	for(int i = 0; i < 4; i++){
 		double detS = S[0] * S[1] * S[2];
-		double f = detS - std::min( std::max(detS,rangeMin) , rangeMax );
+		double f = detS - std::min( std::max(detS,limit_min) , limit_max );
 		Eigen::Vector3d g( S[1]*S[2] , S[0]*S[2] , S[0]*S[1] );
 		d = -((f - g.dot(d)) / g.dot(g)) * g;
 		S = svd.singularValues() + d;
 	}
-	
-	if( svd.matrixU().determinant()*svd.matrixV().determinant() < 0.0f ){
-		S[2] = -S[2];
-	}
-	
+
+	if( F.determinant() < 0.0 ){ S[2] = -1.0; }
+
 	// Reconstruct with new singular values
 	Matrix<double,3,3> proj = svd.matrixU() * S.asDiagonal() * svd.matrixV().transpose();
-
-	// Proj needs to be 9d vector
-	VectorXd p; p.resize(9);
-	p(0) = proj(0,0); p(3) = proj(0,1); p(6) = proj(0,2);
-	p(1) = proj(1,0); p(4) = proj(1,1); p(7) = proj(1,2);
-	p(2) = proj(2,0); p(5) = proj(2,1); p(8) = proj(2,2);
+	Vector9d p = Map<Vector9d>(proj.data());
 
 	// Update zi and ui
-	double k = stiffness*volume;
-	VectorXd zi = ( k*p + weight*weight*(DixPlusUi) ) / (weight*weight + k);
+	double k = stiffness*rest_volume;
+	Vector9d zi = ( k*p + weight*weight*(DixPlusUi) ) / (weight*weight + k);
 
-	ui += ( Dix - zi );
+	ui.noalias() += ( Dix - zi );
+	u.segment<9>( global_idx ) = ui;
+	z.segment<9>( global_idx ) = zi;
 
-	u.segment( global_idx, Di_rows ) = ui;
-	z.segment( global_idx, Di_rows ) = zi; 
-	
-}
-
-
-//
-// Anisotropic tet
-//
-
-void AnisotropicTet::initialize( const VectorXd &x, const VectorXd &v, const VectorXd &masses, const double timestep ){
-	helper::init_tet_force( idx, x, volume, B, edges_inv );
-	weight = sqrtf(stiffness)*sqrtf(volume);
-}
-
-void AnisotropicTet::computeDi( int dof ){
-	SparseMatrix<double> newDi;
-	helper::init_tet_Di( idx, B, dof, newDi );
-	setDi( newDi );
-}
-
-void AnisotropicTet::update( double dt, const VectorXd &Dx, VectorXd &u, VectorXd &z ) const {
-
-	// Computing Di * x + ui
-	int Di_rows = getDi()->rows();
-	VectorXd Dix = Dx.segment( global_idx, Di_rows );
-	VectorXd ui = u.segment( global_idx, Di_rows );
-	VectorXd DixPlusUi = Dix + ui;
-
-	// Computing F (rearranging terms from 9x1 vector DixPlusUi to make a 3x3)
-	Matrix<double,3,3> F;
-	F(0,0) = DixPlusUi(0); F(1,0) = DixPlusUi(1); F(2,0) = DixPlusUi(2);
-	F(0,1) = DixPlusUi(3); F(1,1) = DixPlusUi(4); F(2,1) = DixPlusUi(5);
-	F(0,2) = DixPlusUi(6); F(1,2) = DixPlusUi(7); F(2,2) = DixPlusUi(8);
-	
-	double FeNorm = (F*e).norm();
-	double alpha = (1.0 - FeNorm ) / ( (weight*weight)/(k*volume) + FeNorm );
-	//double alpha = ( (F*e).norm() - (F*e).squaredNorm() ) / ( (F*e).squaredNorm() + (weight*weight/(2.0*k*volume))*(F*e*e.transpose()).norm());
-	
-	F += alpha*F*eeT;
-	
-	Eigen::VectorXd zi(9);
-	zi(0) = F(0,0);  zi(3) = F(0,1);  zi(6) = F(0,2);
-	zi(1) = F(1,0);  zi(4) = F(1,1);  zi(7) = F(1,2);
-	zi(2) = F(2,0);  zi(5) = F(2,1);  zi(8) = F(2,2);
-	
-	ui += (Dix - zi);
-	
-	u.segment( global_idx, Di_rows ) = ui;
-	z.segment( global_idx, Di_rows ) = zi;
 }
 
 //
@@ -213,7 +226,6 @@ double NHProx::energyDensity( const cppoptlib::Vector<double> &Sigma ) const {
 
 // Compute objective function (prox operator)
 double NHProx::value(const cppoptlib::Vector<double> &x) {
-	// Return max float (large number) that won't cause nans
 	if( x[0]<0.0 || x[1]<0.0 || x[2]<0.0 ){ return std::numeric_limits<float>::max(); }
 	double r = energyDensity( x );
 	double r2 = (k*0.5) * (x-Sigma_init).squaredNorm();
@@ -223,7 +235,6 @@ double NHProx::value(const cppoptlib::Vector<double> &x) {
 void NHProx::gradient(const cppoptlib::Vector<double> &x, cppoptlib::Vector<double> &grad){
 	double detSigma = x[0]*x[1]*x[2];
 	if( detSigma <= 0.0 ){
-//		grad.setZero();
 		grad = VectorXd::Ones(3) * std::numeric_limits<float>::max();
 	} else {
 		Eigen::Vector3d invSigma(1.0/x[0],1.0/x[1],1.0/x[2]);
@@ -268,7 +279,6 @@ double StVKProx::energyDensity( Vector3d &Sigma ) const {
 
 // Compute objective function (prox operator)
 double StVKProx::value(const cppoptlib::Vector<double> &x) {
-	// Return max float (large number) that won't cause nans
 	if( x[0]<0.0 || x[1]<0.0 || x[2]<0.0 ){ return std::numeric_limits<float>::max(); }
 	Eigen::Vector3d Sigma(x[0],x[1],x[2]);
 	double r = energyDensity( Sigma );
@@ -293,34 +303,29 @@ void StVKProx::gradient(const cppoptlib::Vector<double> &x, cppoptlib::Vector<do
 void HyperElasticTet::initialize( const VectorXd &x, const VectorXd &v, const VectorXd &masses, const double timestep ){
 	helper::init_tet_force( idx, x, volume, B, edges_inv );
 
-	// Max or min?
-//	double stiff = std::max(mu,lambda);
-	double stiff = std::min(mu,lambda);
+	double stiff = std::min(mu,lambda); // what should k be?
 	weight = sqrtf(stiff)*sqrtf(volume);
-	double k = (weight*weight/volume);
-	stvkprox = std::shared_ptr<StVKProx>( new StVKProx(mu,lambda,k,volume) );
-	nhprox = std::shared_ptr<NHProx>( new NHProx(mu,lambda,k,volume) );
+	stvkprox = std::shared_ptr<StVKProx>( new StVKProx(mu,lambda,stiff) );
+	nhprox = std::shared_ptr<NHProx>( new NHProx(mu,lambda,stiff) );
 }
 
-void HyperElasticTet::computeDi( int dof ){
-	SparseMatrix<double> newDi;
-	helper::init_tet_Di( idx, B, dof, newDi );
-	setDi( newDi );
+void HyperElasticTet::get_selector( const Eigen::VectorXd &x, std::vector< Eigen::Triplet<double> > &triplets, std::vector<double> &weights ){
+	global_idx = weights.size();
+	helper::init_tet_Di( idx, B, x.size(), triplets );
+	for( int i=global_idx; i<triplets.size(); ++i ){
+		weights.push_back( weight );
+	}
 }
 
-void HyperElasticTet::update( double dt, const VectorXd &Dx, VectorXd &u, VectorXd &z ) const {
+void HyperElasticTet::project( double dt, const VectorXd &Dx, VectorXd &u, VectorXd &z ) const {
 
-	// Computing Di * x + ui
-	int Di_rows = getDi()->rows();
-	VectorXd Dix = Dx.segment( global_idx, Di_rows );
-	VectorXd ui = u.segment( global_idx, Di_rows );
-	VectorXd DixPlusUi = Dix + ui;
+	typedef Matrix<double,9,1> Vector9d;
+	Vector9d Dix = Dx.segment<9>( global_idx );
+	Vector9d ui = u.segment<9>( global_idx );
+	Vector9d DixPlusUi = Dix+ui;
 
 	// Computing F (rearranging terms from 9x1 vector DixPlusUi to make a 3x3)
-	Matrix<double,3,3> F;
-	F(0,0) = DixPlusUi(0); F(1,0) = DixPlusUi(1); F(2,0) = DixPlusUi(2);
-	F(0,1) = DixPlusUi(3); F(1,1) = DixPlusUi(4); F(2,1) = DixPlusUi(5);
-	F(0,2) = DixPlusUi(6); F(1,2) = DixPlusUi(7); F(2,2) = DixPlusUi(8);
+	Matrix3d F = Map<Matrix3d>(DixPlusUi.data());
 
 	// SVD of deform grad (model reduction, faster solve)
 	Vector3d S0; Matrix3d U, Vt;
@@ -331,7 +336,7 @@ void HyperElasticTet::update( double dt, const VectorXd &Dx, VectorXd &u, Vector
 	stvkprox->setSigma0( S0 );
 
 	// Initial guess
-	cppoptlib::Vector<double> x2 = last_prox_result;
+	Eigen::VectorXd x2 = last_prox_result;
 
 	// Initial guess needs positive entries
 	if( x2[2] < 0.0 ){ x2[2] *= -1.0; }
@@ -347,35 +352,15 @@ void HyperElasticTet::update( double dt, const VectorXd &Dx, VectorXd &u, Vector
 		case 1: solver->minimize(*(stvkprox.get()), x2); break;
 	}
 
-	// Remake the deform grad
+	// Reconstruct with new singular values
 	last_prox_result = x2;
-	Matrix3d Zi = U * x2.asDiagonal() * Vt;
-	VectorXd zi(9);
-	zi(0) = Zi(0,0); zi(1) = Zi(1,0); zi(2) = Zi(2,0);
-	zi(3) = Zi(0,1); zi(4) = Zi(1,1); zi(5) = Zi(2,1); 
-	zi(6) = Zi(0,2); zi(7) = Zi(1,2); zi(8) = Zi(2,2);
-
-	#ifdef PDADMM_VERIFY
-	if( Zi.determinant() < 0.0 || !( x2[0]>0.0 && x2[1]>0.0 && x2[2]>0.0 ) ){
-		std::cout << "\n\nNH Tet inversion: det F:" << Zi.determinant() << "\nnew F:\n" << Zi << "\nnew sigma: \n" << x2 << "\n\n" << std::endl;
-		std::cout << "init sigma: " << S0[0] << " " << S0[1] << " " << S0[2] << std::endl;
-
-		Eigen::Vector3d v0(0,0,0);
-		Eigen::Vector3d v1(zi(0),zi(1),zi(2));
-		Eigen::Vector3d v2(zi(3),zi(4),zi(5));
-		Eigen::Vector3d v3(zi(6),zi(7),zi(8));
-		double volumeCurrent = fabs( (v0-v3).dot( (v1-v3).cross(v2-v3) ) ) / 6.0;
-
-		std::cout << "original volume was .. " << volume << std::endl;
-		std::cout << "current volume is .. " << volumeCurrent << std::endl;
-		exit(0);
-	}
-	#endif
+	Matrix3d proj = U * x2.asDiagonal() * Vt;
+	Vector9d zi = Map<Vector9d>(proj.data());
 
 	// Update global vars
-	ui += ( Dix - zi );
-	u.segment( global_idx, Di_rows ) = ui;
-	z.segment( global_idx, Di_rows ) = zi;
+	ui.noalias() += ( Dix - zi );
+	u.segment<9>( global_idx ) = ui;
+	z.segment<9>( global_idx ) = zi;
 }
 
 

@@ -1,4 +1,4 @@
-// Copyright (c) 2016, University of Minnesota
+// Copyright (c) 2017, University of Minnesota
 // 
 // ADMM-Elastic Uses the BSD 2-Clause License (http://www.opensource.org/licenses/BSD-2-Clause)
 // Redistribution and use in source and binary forms, with or without modification, are
@@ -26,7 +26,6 @@ using namespace Eigen;
 //	TriangleStrain
 //
 
-
 void LimitedTriangleStrain::initialize( const VectorXd &x, const VectorXd &v, const VectorXd &masses, const double timestep ){
 
 	assert(3*id0+2 < x.size());
@@ -47,8 +46,9 @@ void LimitedTriangleStrain::initialize( const VectorXd &x, const VectorXd &v, co
 	Vector3d n1 = e12.normalized();
 	Vector3d n2 = (e13 - e13.dot(n1)*n1).normalized();
 
-	Matrix<double,3,2> basis;
-	Matrix<double,3,2> edges;
+	Eigen::Matrix<double,3,2> basis;
+	Eigen::Matrix<double,3,2> edges;
+
 	basis.col(0) = n1; basis.col(1) = n2;
 	edges.col(0) = e12; edges.col(1) = e13;
 	
@@ -59,50 +59,24 @@ void LimitedTriangleStrain::initialize( const VectorXd &x, const VectorXd &v, co
 	B = D * Xg.inverse();
 
 	area = std::abs((basis.transpose() * edges).determinant() / 2.0f);
-	weight = sqrt(stiffness)*sqrt(area);
-
+	weight = sqrtf(stiffness) * sqrtf(area);
 }
 
 
-void LimitedTriangleStrain::computeDi( int dof ){
-
-	SparseMatrix<double> newDi;
-	newDi.resize(6,dof);
-	newDi.setZero();
-	
-	int col0 = 3*id0;
-	int col1 = 3*id1;
-	int col2 = 3*id2;
-	
-	newDi.coeffRef(0,col0) = B(0,0);
-	newDi.coeffRef(1,col0+1) = B(0,0);
-	newDi.coeffRef(2,col0+2) = B(0,0);
-	
-	newDi.coeffRef(3,col0) = B(0,1);
-	newDi.coeffRef(4,col0+1) = B(0,1);
-	newDi.coeffRef(5,col0+2) = B(0,1);
-	
-	newDi.coeffRef(0,col1) = B(1,0);
-	newDi.coeffRef(1,col1+1) = B(1,0);
-	newDi.coeffRef(2,col1+2) = B(1,0);
-	
-	newDi.coeffRef(3,col1) = B(1,1);
-	newDi.coeffRef(4,col1+1) = B(1,1);
-	newDi.coeffRef(5,col1+2) = B(1,1);
-	
-	newDi.coeffRef(0,col2) = B(2,0);
-	newDi.coeffRef(1,col2+1) = B(2,0);
-	newDi.coeffRef(2,col2+2) = B(2,0);
-	
-	newDi.coeffRef(3,col2) = B(2,1);
-	newDi.coeffRef(4,col2+1) = B(2,1);
-	newDi.coeffRef(5,col2+2) = B(2,1);
-
-	setDi( newDi );
+void LimitedTriangleStrain::get_selector( const Eigen::VectorXd &x, std::vector< Eigen::Triplet<double> > &triplets, std::vector<double> &weights ){
+	global_idx = weights.size();
+	int cols[3] = { 3*id0, 3*id1, 3*id2 };
+	for( int i=0; i<3; ++i ){
+		for( int j=0; j<3; ++j ){
+			triplets.push_back( Triplet<double>(i+global_idx, cols[j]+i, B(j,0) ) );
+			triplets.push_back( Triplet<double>(3+i+global_idx, cols[j]+i, B(j,1) ) );
+		}
+	}
+	for( int i=0; i<6; ++i ){ weights.push_back( weight ); }
 }
 
 
-void LimitedTriangleStrain::update( double dt, const VectorXd &Dx, VectorXd &u, VectorXd &z ) const {
+void LimitedTriangleStrain::project( double dt, const VectorXd &Dx, VectorXd &u, VectorXd &z ) const {
 
 	typedef Matrix<double,6,1> Vector6d;
 	Vector6d Dix = Dx.segment<6>( global_idx );
@@ -117,30 +91,21 @@ void LimitedTriangleStrain::update( double dt, const VectorXd &Dx, VectorXd &u, 
 	
 	// Constructing the matrix T
 	Matrix<double,3,2> T = svd.matrixU().leftCols<2>() * svd.matrixV().transpose();
-		
 	Vector6d p = Map<Vector6d>(T.data());
-	
+
 	// Update zi and ui
 	double k = stiffness*area;
 	Vector6d zi = ( k*p + weight*weight*(DixPlusUi) ) / ( weight*weight + k );
 
-	//std::cout << "Zi is .. \n" << Zi << std::endl;
-	
-	// Divide out the weight
-	//Zi /= weight;
+	if( strain_limiting ){
+		double l_col0 = zi.head<3>().norm();
+		double l_col1 = zi.tail<3>().norm();
+		if( l_col0 < limit_min ){ zi.head<3>() *= ( limit_min / fmaxf( l_col0, 1e-6 ) ); }
+		if( l_col1 < limit_min ){ zi.tail<3>() *= ( limit_min / fmaxf( l_col1, 1e-6 ) ); }
+		if( l_col0 > limit_max ){ zi.head<3>() *= ( limit_max / fmaxf( l_col0, 1e-6 ) ); }
+		if( l_col1 > limit_max ){ zi.tail<3>() *= ( limit_max / fmaxf( l_col1, 1e-6 ) ); }
+	}
 
-//4. For cloth it's actually more realistic to only limit the
-//axis-aligned strain but not the shear strain. That's easy to do:
-//instead of taking the SVD of F and limiting its singular values, just
-//scale the columns of F so their lengths lie in the specified range.
-
-	double l_col0 = zi.head<3>().norm();
-	double l_col1 = zi.tail<3>().norm();
-	if( l_col0 < limit_min ){ zi.head<3>() *= ( limit_min / fmaxf( l_col0, 1e-6 ) ); }
-	if( l_col1 < limit_min ){ zi.tail<3>() *= ( limit_min / fmaxf( l_col1, 1e-6 ) ); }
-	if( l_col0 > limit_max ){ zi.head<3>() *= ( limit_max / fmaxf( l_col0, 1e-6 ) ); }
-	if( l_col1 > limit_max ){ zi.tail<3>() *= ( limit_max / fmaxf( l_col1, 1e-6 ) ); }
-	
 	// update u and z
 	ui.noalias() += ( Dix - zi );
 	u.segment<6>( global_idx ) = ui;
@@ -149,15 +114,54 @@ void LimitedTriangleStrain::update( double dt, const VectorXd &Dx, VectorXd &u, 
 
 
 //
-//	PDTriangleStrain
+//	Fung Skin Model
 //
 
+inline double FungProx::energyDensity( Vector3d &Sigma ) const {
+	double I_1 = Sigma[0]*Sigma[0]+Sigma[1]*Sigma[1]+Sigma[2]*Sigma[2];
+	double t1 = mu/(b*2.0);
+	double t2 = exp( b*(I_1-3.0) ) - 1.0;
+	if( !std::isfinite(t2) ){ return std::numeric_limits<float>::max(); }
+	double r = (t1*t2);
+	return r;
+}
 
-void PDTriangleStrain::initialize( const VectorXd &x, const VectorXd &v, const VectorXd &masses, const double timestep ){
+//inline double FungProx::incompress( Vector2d &Sigma ) const {
+//	return -mu*Sigma[0]*Sigma[1]+mu;
+//}
 
-	assert(3*id0+2 < x.size());
-	assert(3*id1+2 < x.size());
-	assert(3*id2+2 < x.size());
+// Compute objective function (prox operator)
+double FungProx::value(const cppoptlib::Vector<double> &x) {
+	if( x[0]<=0.0 || x[1]<=0.0 ){ return std::numeric_limits<float>::max(); }
+	if( std::isnan( x[0] ) || std::isnan( x[1] ) ){ printf("\nBAD X: %f %f\n", x[0], x[1] ); }
+	Eigen::Vector2d Sigma(x[0],x[1]);
+	Eigen::Vector3d Sigma3(x[0],x[1],1.0/(x[0]*x[1]));
+	double r0 = energyDensity( Sigma3 );
+//	double r1 = incompress( Sigma );
+	double r2 = (k*0.5) * (Sigma-this->Sigma_init).squaredNorm();
+//printf("\nmu: %f", mu);
+	return (r0+r2);
+}
+
+void FungProx::gradient(const cppoptlib::Vector<double> &x, cppoptlib::Vector<double> &grad){
+	//finiteGradient(x,grad); return;
+	double detSigma = x[0]*x[1];
+	const double minval = std::numeric_limits<float>::min();
+	if( std::abs(x[0])<minval || std::abs(x[1])<minval ){
+		grad = VectorXd::Ones(2) * std::numeric_limits<float>::max();
+		return;
+	}
+
+	double sig3 = 1.0/(x[0]*x[1]);
+	double I_1 = (x[0]*x[0]+x[1]*x[1]+sig3*sig3);
+	double t1 = 0.5 * mu * exp( b*( I_1-3.0 ) );
+	Eigen::Vector2d t2 = k*(x-this->Sigma_init);
+	grad[0] = t1*(2.0*x[0]-2.0/(x[0]*x[0]*x[0]*x[1]*x[1]) ) + t2[0];
+	grad[1] = t1*(2.0*x[1]-2.0/(x[1]*x[1]*x[1]*x[0]*x[0]) ) + t2[1];
+
+}
+
+void FungTriangle::initialize( const VectorXd &x, const VectorXd &v, const VectorXd &masses, const double timestep ){
 
 	Vector3d x1( x(3*id0+0), x(3*id0+1), x(3*id0+2) );
 	Vector3d x2( x(3*id1+0), x(3*id1+1), x(3*id1+2) );
@@ -173,8 +177,8 @@ void PDTriangleStrain::initialize( const VectorXd &x, const VectorXd &v, const V
 	Vector3d n1 = e12.normalized();
 	Vector3d n2 = (e13 - e13.dot(n1)*n1).normalized();
 
-	Matrix<double,3,2> basis;
-	Matrix<double,3,2> edges;
+	Eigen::Matrix<double,3,2> basis;
+	Eigen::Matrix<double,3,2> edges;
 	basis.col(0) = n1; basis.col(1) = n2;
 	edges.col(0) = e12; edges.col(1) = e13;
 	
@@ -184,109 +188,110 @@ void PDTriangleStrain::initialize( const VectorXd &x, const VectorXd &v, const V
 	
 	B = D * Xg.inverse();
 
+//	weight = sqrt( std::min(a,c) );
+
 	area = std::abs((basis.transpose() * edges).determinant() / 2.0f);
-	weight = sqrt(stiffness)*sqrt(area);
+	weight = sqrt(mu) * sqrt(area);
+	double k = mu;//(weight*weight)/area;
+//	weight = sqrt(mu);
+//	double k = mu/area;
+	fungprox = std::unique_ptr<FungProx>( new FungProx(mu,k) );
 
 }
 
 
-void PDTriangleStrain::computeDi( int dof ){
-
-	SparseMatrix<double> newDi;
-	newDi.resize(6,dof);
-	newDi.setZero();
-	
-	int col0 = 3*id0;
-	int col1 = 3*id1;
-	int col2 = 3*id2;
-	
-	newDi.coeffRef(0,col0) = B(0,0);
-	newDi.coeffRef(1,col0+1) = B(0,0);
-	newDi.coeffRef(2,col0+2) = B(0,0);
-	
-	newDi.coeffRef(3,col0) = B(0,1);
-	newDi.coeffRef(4,col0+1) = B(0,1);
-	newDi.coeffRef(5,col0+2) = B(0,1);
-	
-	newDi.coeffRef(0,col1) = B(1,0);
-	newDi.coeffRef(1,col1+1) = B(1,0);
-	newDi.coeffRef(2,col1+2) = B(1,0);
-	
-	newDi.coeffRef(3,col1) = B(1,1);
-	newDi.coeffRef(4,col1+1) = B(1,1);
-	newDi.coeffRef(5,col1+2) = B(1,1);
-	
-	newDi.coeffRef(0,col2) = B(2,0);
-	newDi.coeffRef(1,col2+1) = B(2,0);
-	newDi.coeffRef(2,col2+2) = B(2,0);
-	
-	newDi.coeffRef(3,col2) = B(2,1);
-	newDi.coeffRef(4,col2+1) = B(2,1);
-	newDi.coeffRef(5,col2+2) = B(2,1);
-
-	setDi( newDi );
+void FungTriangle::get_selector( const Eigen::VectorXd &x, std::vector< Eigen::Triplet<double> > &triplets, std::vector<double> &weights ){
+	global_idx = weights.size();
+	int cols[3] = { 3*id0, 3*id1, 3*id2 };
+	for( int i=0; i<3; ++i ){
+		for( int j=0; j<3; ++j ){
+			triplets.push_back( Triplet<double>(i+global_idx, cols[j]+i, B(j,0) ) );
+			triplets.push_back( Triplet<double>(3+i+global_idx, cols[j]+i, B(j,1) ) );
+		}
+	}
+	for( int i=0; i<6; ++i ){ weights.push_back( weight ); }
 }
 
 
-void PDTriangleStrain::update( double dt, const VectorXd &Dx, VectorXd &u, VectorXd &z ) const {
 
-	int Di_rows = getDi()->rows();
-	VectorXd Dix = Dx.segment( global_idx, Di_rows );
-	VectorXd ui = u.segment( global_idx, Di_rows );
-	VectorXd DixPlusUi = Dix+ui;
+void FungTriangle::project( double dt, const VectorXd &Dx, VectorXd &u, VectorXd &z ) const {
+
+	typedef Matrix<double,6,1> Vector6d;
+	Vector6d Dix = Dx.segment<6>( global_idx );
+	Vector6d ui = u.segment<6>( global_idx );
+	Vector6d DixPlusUi = Dix+ui;
 
 	// Computing F (rearranging terms from 6x1 vector AixPlusUi to make a 3x2)
-	Matrix<double,3,2> F;
-	F(0,0) = DixPlusUi(0);
-	F(1,0) = DixPlusUi(1);
-	F(2,0) = DixPlusUi(2);
-	F(0,1) = DixPlusUi(3);
-	F(1,1) = DixPlusUi(4);
-	F(2,1) = DixPlusUi(5);
-		
-	// Compute the singular value decomposition
+	Matrix<double,3,2> F = Map<Matrix<double,3,2> >(DixPlusUi.data());
 	JacobiSVD<Matrix<double,3,2> > svd(F, ComputeFullU | ComputeFullV);
-	
-	// Setting the singular values to 1
-	Vector2d S = svd.singularValues();
+	cppoptlib::Vector<double> x2 = svd.singularValues();
 
-	// Do strain limiting now
-	if( S(0) < limit_min ){
-		S(0) = limit_min;
-	} else if( S(0) > limit_max ){
-		S(0) = limit_max;
+	// Minimize
+	fungprox->setSigma0( Eigen::Vector2d(x2[0],x2[1]) );
+	solver->minimize(*(fungprox.get()), x2);
+
+//	printf("\n%f %f", x2(0), x2(1) );
+	// Incompressibility
+//	if( x2(0) < 1 ){ x2(0) = 1; }
+//	if( x2(1) < 1 ){ x2(1) = 1; }
+
+	// Reform F
+	Matrix<double,3,2> Diag; Diag.setZero();
+	Diag.block<2,2>(0,0) = x2.asDiagonal();
+	F = svd.matrixU() * Diag * svd.matrixV().transpose();
+	Vector6d zi = Map<Vector6d>(F.data());
+
+	// update u and z
+	ui.noalias() += ( Dix - zi );
+	u.segment<6>( global_idx ) = ui;
+	z.segment<6>( global_idx ) = zi;
+}
+
+
+static inline double aclamp( double v, double min, double max ){
+	v = ( v < max ? v : max );
+	v = ( v > min ? v : min );
+	return v;
+}
+
+void TriArea::project( double dt, const Eigen::VectorXd &Dx, Eigen::VectorXd &u, Eigen::VectorXd &z ) const {
+
+	typedef Matrix<double,6,1> Vector6d;
+	Vector6d Dix = Dx.segment<6>( global_idx );
+	Vector6d ui = u.segment<6>( global_idx );
+	Vector6d DixPlusUi = Dix+ui;
+
+	// Computing F (rearranging terms from 6x1 vector AixPlusUi to make a 3x2)
+	Matrix<double,3,2> F = Map<Matrix<double,3,2> >(DixPlusUi.data());
+	JacobiSVD<Matrix<double,3,2> > svd(F, ComputeFullU | ComputeFullV);
+
+	// Compute the singular value decomposition
+	Eigen::Vector2d S = svd.singularValues();
+	Eigen::Vector2d d(0.0f, 0.0f);
+	for (int i = 0; i < iters; ++i) {
+		double v = S(0) * S(1);
+		double f = v - aclamp(v, limit_min, limit_max);
+		Eigen::Vector2d g(S(1), S(0));
+		d = -((f - g.dot(d)) / g.dot(g)) * g;
+		S = svd.singularValues() + d;
 	}
-	
-	if( S(1) < limit_min ){
-		S(1) = limit_min;
-	} else if( S(1) > limit_max ){
-		S(1) = limit_max;
-	}
-	
-	// Creating a 3x2 matrix with the (0,0) and (1,1) entries being the tweaked singular values
+
+	// Reconstruct F and compute projection
 	Matrix<double,3,2> Diag;
 	Diag.setZero();
 	Diag.block<2,2>(0,0) = S.asDiagonal();
-	
-	// Constructing the matrix T
-	Matrix<double,3,2> T;
-	T = svd.matrixU() * Diag * svd.matrixV().transpose();
-		
-	VectorXd p(6);
-	p(0) = T(0,0);
-	p(1) = T(1,0);
-	p(2) = T(2,0);
-	p(3) = T(0,1);
-	p(4) = T(1,1);
-	p(5) = T(2,1);
+	F = svd.matrixU() * Diag * svd.matrixV().transpose();
+	Vector6d p = Map<Vector6d>(F.data());
 	
 	// Update zi and ui
 	double k = stiffness*area;
-	VectorXd zi = ( k*p + weight*weight*(DixPlusUi) ) / ( weight*weight + k );
-	
+	Vector6d zi = ( k*p + weight*weight*(DixPlusUi) ) / ( weight*weight + k );
+
 	// update u and z
-	ui += ( Dix - zi );
-	u.segment( global_idx, Di_rows ) = ui;
-	z.segment( global_idx, Di_rows ) = zi;
+	ui.noalias() += ( Dix - zi );
+	u.segment<6>( global_idx ) = ui;
+	z.segment<6>( global_idx ) = zi;
+
 }
+
 

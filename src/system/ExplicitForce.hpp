@@ -53,7 +53,7 @@ public:
 	// They can affect a subset of indices or all of them (default)
 	ExplicitForce( std::vector<int> indices_ = std::vector<int>(0) ){ indices = indices_; }
 	ExplicitForce( Eigen::Vector3d direction_ , std::vector<int> indices_ = std::vector<int>(0) ){ direction = direction_; indices = indices_; }
-	virtual void update( double dt, Eigen::VectorXd &x, Eigen::VectorXd &v, Eigen::VectorXd &m ) const;
+	virtual void project( double dt, Eigen::VectorXd &x, Eigen::VectorXd &v, Eigen::VectorXd &m ) const;
 	Eigen::Vector3d direction;
 	std::vector<int> indices; // if size=0, apply to all nodes
 };
@@ -63,7 +63,7 @@ class WindForce : public ExplicitForce {
 public:
 	// Input is a list of all triangles the wind force affects.
 	WindForce( std::vector< int > &tris_ ) : tris(tris_) { this->direction=Eigen::Vector3d(0,0,0); }
-	void update( double dt, Eigen::VectorXd &x, Eigen::VectorXd &v, Eigen::VectorXd &m ) const;
+	void project( double dt, Eigen::VectorXd &x, Eigen::VectorXd &v, Eigen::VectorXd &m ) const;
 	std::vector< int > tris;
 };
 

@@ -1,4 +1,4 @@
-// Copyright (c) 2016, University of Minnesota
+// Copyright (c) 2017, University of Minnesota
 // 
 // ADMM-Elastic Uses the BSD 2-Clause License (http://www.opensource.org/licenses/BSD-2-Clause)
 // Redistribution and use in source and binary forms, with or without modification, are
@@ -26,57 +26,47 @@ using namespace Eigen;
 //	Spring Force
 //
 
-
 void Spring::initialize( const VectorXd &x, const VectorXd &v, const VectorXd &masses, const double timestep ){
 
 	Vector3d x_0( x[idx0*3], x[idx0*3+1], x[idx0*3+2] );
 	Vector3d x_1( x[idx1*3], x[idx1*3+1], x[idx1*3+2] );
 	Vector3d disp = x_0 - x_1;
-	rest_length = disp.norm();
+	double length = disp.norm();
+//	if( length <= 0.0 ){ length = 1e-16; }
+	rest_length = length;
 	weight = sqrt(stiffness);
 }
 
-void Spring::computeDi( int dof ){
-
-	SparseMatrix<double> newDi;
-	newDi.resize(3,dof);
+void Spring::get_selector( const Eigen::VectorXd &x, std::vector< Eigen::Triplet<double> > &triplets, std::vector<double> &weights ){
+	global_idx = weights.size();
 	const int col0 = 3 * idx0; const int col1 = 3 * idx1;
-	newDi.coeffRef(0,col0) = 1.0; newDi.coeffRef(1,col0+1) = 1.0; newDi.coeffRef(2,col0+2) = 1.0;
-	newDi.coeffRef(0,col1) = -1.0; newDi.coeffRef(1,col1+1) = -1.0; newDi.coeffRef(2,col1+2) = -1.0;
-	setDi( newDi );	
+
+	for( int i=0; i<3; ++i ){
+		triplets.push_back( Triplet<double>( i+global_idx, col0+i, 1.0 ) );
+		triplets.push_back( Triplet<double>( i+global_idx, col1+i, -1.0 ) );
+	}
+
+	for( int i=0; i<3; ++i ){ weights.push_back(weight); }
 }
 
-void Spring::update( double dt, const VectorXd &Dx, VectorXd &u, VectorXd &z ) const {
+void Spring::project( double dt, const VectorXd &Dx, VectorXd &u, VectorXd &z ) const {
 
 	// Computing Di * x + ui
-	int Di_rows = getDi()->rows();
-	VectorXd Dix = Dx.segment( global_idx, Di_rows );
-	VectorXd ui = u.segment( global_idx, Di_rows );
-	VectorXd DixPlusUi = Dix + ui;
+	Vector3d Dix = Dx.segment<3>( global_idx );
+	Vector3d ui = u.segment<3>( global_idx );
+	Vector3d DixUi = Dix + ui;
 
 	// Analytical update using projection p
-	double DixPlusUi_norm = DixPlusUi.norm();
-	VectorXd DixPlusUi_normed = DixPlusUi / DixPlusUi_norm;
+	double DixUi_norm = DixUi.norm();
+	Vector3d DixUi_normed = DixUi / DixUi_norm;
+	if( DixUi_norm <= 0.0 ){ DixUi_normed.setZero(); }
 
-	VectorXd p = rest_length * DixPlusUi_normed;
+	Vector3d p = rest_length * DixUi_normed;
+	Vector3d zi = ( 1.0 / (weight*weight + stiffness) ) * (stiffness*p + weight*weight*(DixUi));
 
-	VectorXd zi = ( 1.0 / (weight*weight + stiffness) ) * (stiffness*p + weight*weight*(DixPlusUi));
 	ui += ( Dix - zi );
-	u.segment( global_idx, Di_rows ) = ui;
-	z.segment( global_idx, Di_rows ) = zi;
-	
+	u.segment<3>( global_idx ) = ui;
+	z.segment<3>( global_idx ) = zi;
+
 }
-
-/*
-double Spring::getEnergy( const Eigen::VectorXd& Dx, Eigen::VectorXd& grad ) const {
-	int Di_rows = getDi()->rows();
-	VectorXd Dix = Dx.segment( global_idx, Di_rows );
-	double energy = 0.5 * stiffness * pow( rest_length - Dix.norm() , 2.0 );
-	grad.segment( global_idx, Di_rows ) = stiffness * ( rest_length - Dix.norm() ) * Dix.normalized();
-	return energy;
-}
-*/
-
-
-
 

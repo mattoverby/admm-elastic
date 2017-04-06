@@ -30,8 +30,12 @@ class CollisionShape {
 	public:
 	
 		CollisionShape(Eigen::Vector3d shapeCenter) { center = shapeCenter; }
-		
-		virtual bool isColliding(Eigen::Vector3d pos) const = 0;
+		virtual ~CollisionShape() {}
+
+		// Negative signed distance:
+		// postive if inside, zero on surface, negative (distance to surface) if outside 
+		virtual double isColliding(Eigen::Vector3d pos) const = 0;
+
 		virtual Eigen::Vector3d projectOut(const Eigen::Vector3d currPos) const = 0;
 		
 		Eigen::Vector3d center;

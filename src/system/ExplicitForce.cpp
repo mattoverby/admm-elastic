@@ -26,7 +26,7 @@ using namespace Eigen;
 //	Explicit Force
 //
 
-void ExplicitForce::update( double dt, VectorXd &x, VectorXd &v, VectorXd &m ) const {
+void ExplicitForce::project( double dt, VectorXd &x, VectorXd &v, VectorXd &m ) const {
 	int n_v = indices.size();
 	bool run_all = false;
 	if( n_v == 0 ){ n_v = v.size()/3; run_all=true; }
@@ -39,7 +39,7 @@ void ExplicitForce::update( double dt, VectorXd &x, VectorXd &v, VectorXd &m ) c
 } // end explicit force update
 
 
-void WindForce::update( double dt, VectorXd &x, VectorXd &v, VectorXd &m ) const {
+void WindForce::project( double dt, VectorXd &x, VectorXd &v, VectorXd &m ) const {
 
 	// ANIMATION AERODYNAMICS (1991)
 	// Wejchert and Haumann

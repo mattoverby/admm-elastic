@@ -1,4 +1,4 @@
-// Copyright (c) 2016 University of Minnesota
+// Copyright (c) 2017 University of Minnesota
 // 
 // ADMM-Elastic Uses the BSD 2-Clause License (http://www.opensource.org/licenses/BSD-2-Clause)
 // Redistribution and use in source and binary forms, with or without modification, are
@@ -31,13 +31,15 @@ int main(int argc, char *argv[]){
 	// Initialize the solver. This creates the global matrices and
 	// verifies input. It will return false on a failure.
 	double timestep_s = 1.0; // unreasonably large but this is just a test
-	if( !system.initialize( timestep_s ) ){ return 0; }
+	system.settings.timestep_s  = timestep_s ;
+	if( !system.initialize() ){ return 0; }
 
 	// Now run the solver
 	int n_iters = 20; // Let ADMM run for 20 iterations per timestep.
+	system.settings.admm_iters = n_iters;
 	for( int i=0; i<4; ++i ){ // Four timesteps
 
-		system.step( n_iters );
+		system.step();
 
 		std::cout << "step: " << i << ", pos: (" << system.m_x[0] << ", " << system.m_x[1] << ", " << system.m_x[2] << ')' << std::endl;
 
@@ -51,7 +53,7 @@ int main(int argc, char *argv[]){
 bool setup( System *system ){
 
 	using namespace Eigen;
-	system->verbose(0);
+	system->settings.verbose = 0;
 
 	// Add nodes to the system.
 	// We can use system->add_nodes, or just add

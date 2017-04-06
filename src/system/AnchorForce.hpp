@@ -1,4 +1,4 @@
-// Copyright (c) 2016, University of Minnesota
+// Copyright (c) 2017, University of Minnesota
 // 
 // ADMM-Elastic Uses the BSD 2-Clause License (http://www.opensource.org/licenses/BSD-2-Clause)
 // Redistribution and use in source and binary forms, with or without modification, are
@@ -54,18 +54,20 @@ namespace helper {
 //
 class StaticAnchor : public Force {
 public:
-	StaticAnchor( int idx_ ) : idx(idx_) {}
+	StaticAnchor( int idx_, double use_weight_=-1.0 ) : idx(idx_) {
+		if( use_weight_ > 0.0 ){ weight = use_weight_; }
+		else{ weight = 1000.f; }
+	}
 	void initialize( const Eigen::VectorXd &x, const Eigen::VectorXd &v, const Eigen::VectorXd &masses, const double timestep );
-	void computeDi( int dof );
-	void update( double dt, const Eigen::VectorXd &Dx, Eigen::VectorXd &u, Eigen::VectorXd &z ) const;
+	void get_selector( const Eigen::VectorXd &x, std::vector< Eigen::Triplet<double> > &triplets, std::vector<double> &weights );
+	void project( double dt, const Eigen::VectorXd &Dx, Eigen::VectorXd &u, Eigen::VectorXd &z ) const;
 
 	int idx;
 	Eigen::Vector3d pos;
 
 protected:
 
-}; // end class force
-
+}; // end class static anchor
 
 //
 //	MovingAnchor 
@@ -86,18 +88,22 @@ public:
 class MovingAnchor : public Force {
 public:
 
-	MovingAnchor( int idx_, std::shared_ptr<ControlPoint> p_ ) : idx(idx_), point(p_) { point -> anchorForce = this; }
+	MovingAnchor( int idx_, std::shared_ptr<ControlPoint> p_, double use_weight_=-1.0 ) : idx(idx_), point(p_) {
+		point -> anchorForce = this;
+		if( use_weight_ > 0.0 ){ weight = use_weight_; }
+		else{ weight = 1000.f; }
+	}
 
-	void initialize( const Eigen::VectorXd &x, const Eigen::VectorXd &v, const Eigen::VectorXd &masses, const double timestep ){ weight = 1000.f; }
-	void computeDi( int dof );
-	void update( double dt, const Eigen::VectorXd &Dx, Eigen::VectorXd &u, Eigen::VectorXd &z ) const;
+	void initialize( const Eigen::VectorXd &x, const Eigen::VectorXd &v, const Eigen::VectorXd &masses, const double timestep ){}
+	void get_selector( const Eigen::VectorXd &x, std::vector< Eigen::Triplet<double> > &triplets, std::vector<double> &weights );
+	void project( double dt, const Eigen::VectorXd &Dx, Eigen::VectorXd &u, Eigen::VectorXd &z ) const;
 
 	int idx;
 	std::shared_ptr<ControlPoint> point;
 
 protected:
 
-}; // end class force
+}; // end class static anchor
 
 
 } // end namespace admm

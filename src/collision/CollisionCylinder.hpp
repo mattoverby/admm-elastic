@@ -1,4 +1,4 @@
-// Copyright (c) 2016 University of Minnesota
+// Copyright (c) 2017 University of Minnesota
 // 
 // ADMM-Elastic Uses the BSD 2-Clause License (http://www.opensource.org/licenses/BSD-2-Clause)
 // Redistribution and use in source and binary forms, with or without modification, are
@@ -30,7 +30,7 @@ class CollisionCylinder : public CollisionShape {
 	
 		CollisionCylinder(Eigen::Vector3d shapeCenter, Eigen::Vector3d cylScale, double cylRadius);
 	
-		bool isColliding(Eigen::Vector3d pos) const;
+		double isColliding(Eigen::Vector3d pos) const;
 		Eigen::Vector3d projectOut(const Eigen::Vector3d currPos) const;
 	
 		double radius;
@@ -40,6 +40,29 @@ class CollisionCylinder : public CollisionShape {
 	
 	
 };
+
+
+// NOTE: for now, we assume the cylinder's axis is parallel to the ground plane,
+//       AND that the cylinder's central axis is parallel with the z direction
+
+CollisionCylinder::CollisionCylinder(Eigen::Vector3d shapeCenter, Eigen::Vector3d cylScale, double cylRadius)
+	: CollisionShape(Eigen::Vector3d(shapeCenter[0],shapeCenter[1],0)) , radius(cylRadius) {
+}
+
+
+double CollisionCylinder::isColliding(Eigen::Vector3d pos) const {
+	Eigen::Vector3d posXY(pos[0],pos[1],0);
+	double distance = radius - (posXY - center).norm();
+	return distance;	
+}
+
+
+Eigen::Vector3d CollisionCylinder::projectOut(const Eigen::Vector3d currPos) const {
+	Eigen::Vector3d posXY(currPos[0],currPos[1],0);
+	Eigen::Vector3d disp = posXY - center;
+	Eigen::Vector3d dir = disp / disp.norm();
+	return center + (radius) * dir + Eigen::Vector3d(0,0,currPos[2]);
+}
 
 } // end of namespace admm
 

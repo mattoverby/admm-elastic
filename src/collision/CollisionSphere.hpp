@@ -31,7 +31,7 @@ class CollisionSphere : public CollisionShape {
 	
 		CollisionSphere(Eigen::Vector3d shapeCenter, double sphRadius);
 		
-		bool isColliding(Eigen::Vector3d pos) const;
+		double isColliding(Eigen::Vector3d pos) const;
 		Eigen::Vector3d projectOut(const Eigen::Vector3d currPos) const;
 		
 		double radius;
@@ -39,6 +39,27 @@ class CollisionSphere : public CollisionShape {
 	private:
 	
 };
+
+CollisionSphere::CollisionSphere(Eigen::Vector3d shapeCenter, double sphRadius)
+	: CollisionShape(shapeCenter) , radius(sphRadius) {
+}
+
+double CollisionSphere::isColliding(Eigen::Vector3d pos) const{
+	
+	double distance = radius - (pos - center).norm();
+	return distance;
+//	return distance <= radius;
+	
+}
+
+
+Eigen::Vector3d CollisionSphere::projectOut(const Eigen::Vector3d currPos) const{
+	
+	Eigen::Vector3d disp = currPos - center;
+	Eigen::Vector3d dir = disp / disp.norm();
+	
+	return center + radius * dir;
+}
 
 } // end of namespace admm
 

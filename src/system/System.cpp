@@ -23,43 +23,42 @@ using namespace admm;
 using namespace Eigen;
 
 
-bool System::step( int solver_iters ){
+bool System::step(){
 
 	// Loop the step callbacks
-	for( int cb_i=0; cb_i<step_callbacks.size(); ++cb_i ){ step_callbacks[cb_i](this); }
+	for( int cb_i=0; cb_i<pre_step_callbacks.size(); ++cb_i ){ pre_step_callbacks[cb_i](this); }
 
 	const int n_forces = forces.size();
-
-	// Initialize ADMM vars
-	// curr_u.setZero(); // Let curr_u be its values at last timestep (better convergence)
-	curr_z = m_D*m_x;
+	const double dt = settings.timestep_s;
 
 	// Take an explicit step to get predicted node positions
 	// with simple forces (e.g. wind/gravity).
 	// These are parallelized internally.
 	for( int i=0; i<explicit_forces.size(); ++i ){
-		explicit_forces[i]->update( timestep_s, m_x, m_v, m_masses );
+		explicit_forces[i]->project( dt, m_x, m_v, m_masses );
 	}
 
+	// Initialize ADMM vars
+	// curr_u.setZero(); // Let curr_u be its values at last timestep (better convergence)
+	curr_z.noalias() = m_D*m_x;
+
 	// Position without constraints
-	VectorXd x_bar = m_x + timestep_s * m_v;
+	VectorXd x_bar = m_x + dt * m_v;
 	VectorXd M_xbar = m_masses.asDiagonal() * x_bar;
 	VectorXd curr_x = x_bar; // Temperorary x used in optimization
 
 	// Run a timestep
-	for( int s_i=0; s_i < solver_iters; ++s_i ){
-
-		if( m_verbose >= 2 ){ print_progress(s_i,solver_iters); }
+	for( int s_i=0; s_i < settings.admm_iters; ++s_i ){
 
 		// Do the matrix multiply here instead of per-force, and then just pass Dx.
 		Dx = m_D*curr_x;
 
 		// Local step (uses curr_x, and does zi and ui updates on each force)
 #pragma omp parallel for
-		for( int i = 0; i < n_forces; ++i ){ forces[i]->update(timestep_s,Dx,curr_u,curr_z); }
+		for( int i = 0; i < n_forces; ++i ){ forces[i]->project(dt,Dx,curr_u,curr_z); }
 
 		// Global step (sets curr_x)
-		solver_termB = M_xbar + solver_dt2_Dt_Wt_W * ( curr_z - curr_u );
+		solver_termB.noalias() = M_xbar + solver_dt2_Dt_Wt_W * ( curr_z - curr_u );
 		curr_x = solver.solve( solver_termB );
 
 		// You can test for convergence and early exit by computing residuals (Eq. 22, 23):
@@ -68,9 +67,9 @@ bool System::step( int solver_iters ){
 	} // end solver loop
 
 	// Computing new velocity and setting the new state
-	m_v = ( curr_x - m_x ) * ( 1.0 / timestep_s );
+	m_v.noalias() = ( curr_x - m_x ) * ( 1.0 / dt );
 	m_x = curr_x;
-	elapsed_s += timestep_s;
+	elapsed_s += dt;
 
 	return true;
 }
@@ -96,66 +95,36 @@ int System::add_nodes( Eigen::VectorXd x, Eigen::VectorXd m ){
 }
 
 
-bool System::initialize( double timestep_ ){
+bool System::initialize(){
 
-	// The order of global values being initialized is a little strange,
-	// along with the getting/setting of local force variables. This
-	// is done primarily for performance reasons.
+	const int dof = m_x.size();
+	if( settings.verbose > 0 ){ std::cout << "Solver::initialize: " << std::endl; }
 
-	if( m_verbose >= 1 ){ std::cout << "Solver::initialize: " << std::flush; }
-
-	timestep_s = timestep_;
-	assert(timestep_s>0.0);
-	if( !( m_masses.size()==m_x.size() && m_x.size()==m_v.size() && m_x.size()>=3 ) ){
+	if( settings.timestep_s <= 0.0 ){
+		std::cerr << "\n**Solver Error: timestep set to " << settings.timestep_s <<
+			"s, changing to 0.04s." << std::endl;
+		settings.timestep_s = 0.04;
+	}
+	if( !( m_masses.size()==m_x.size() && m_x.size()>=3 ) ){
 		std::cerr << "\n**Solver Error: Problem with node data!" << std::endl;
 		return false;
 	}
+	if( m_v.size() < m_x.size() ){ m_v.resize(m_x.size()); }
 	m_v.setZero();
 
-	// Make sure we aren't already initialized
-	if( initialized ){ std::cerr << "\n**Solver Error: Already initialized!" << std::endl; return false; }
-	const int dof = m_x.size();
-
-	// Compute local Di matrices in parallel.
-	// In the future we should avoid doing storing Di matrices on forces to
-	// reduce memory consumption.
+	// Initialize forces
 #pragma omp parallel for
 	for(int i = 0; i < forces.size(); ++i){
-		forces[i]->initialize( m_x, m_v, m_masses, timestep_s );
-		forces[i]->computeDi( dof );
+		forces[i]->initialize( m_x, m_v, m_masses, settings.timestep_s );
 	}
 
-	// Set indices into the global buffers
-	int zu_idx=0;
-	for(int i = 0; i < forces.size(); ++i){
-		forces[i]->set_global_idx( zu_idx );
-		int Di_rows = forces[i]->getDi()->rows();
-		zu_idx += Di_rows;
-	}
-
-	int D_numRows = zu_idx;
-	int D_numCols = m_x.size();
-	int n_nodes = D_numCols/3;
-
-	// Building the global D and W matrices
-	// TODO: From triplets and combine with loop above instead of dense matrices
-	m_W_diag.resize( D_numRows );
-	m_D = SparseMatrix<double>(D_numRows, D_numCols);
-	std::vector< Eigen::Triplet<double> > triplets;
-	int curr_row = 0;
-	for(int i = 0; i < forces.size(); ++i){
-		int numDiRows = forces[i]->getDi()->rows();
-		for (int k=0; k < forces[i]->getDi()->outerSize(); ++k) {
-			for (Eigen::SparseMatrix<double>::InnerIterator it(*forces[i]->getDi(), k); it; ++it) {
-			    triplets.push_back(Eigen::Triplet<double>(it.row()+curr_row, it.col(), it.value()));
-		  	}
-		}
-		for( int j=0; j<numDiRows; ++j ){ m_W_diag[ curr_row + j ] = forces[i]->weight; }
-		curr_row += numDiRows;
-	}
-
-	// Use transpose of D as well
-	m_D.setFromTriplets(triplets.begin(), triplets.end());
+	// Set up the selector matrix (D) and weight (W) matrix
+	std::vector<Eigen::Triplet<double> > triplets;
+	std::vector<double> weights;
+	for(int i = 0; i < forces.size(); ++i){ forces[i]->get_selector( m_x, triplets, weights ); }
+	m_W_diag = Eigen::Map<Eigen::VectorXd>(&weights[0], weights.size());
+	m_D.resize( weights.size(), dof );
+	m_D.setFromTriplets( triplets.begin(), triplets.end() );
 	SparseMatrix<double> Dt = m_D.transpose();
 
 	// Compute mass matrix
@@ -166,8 +135,8 @@ bool System::initialize( double timestep_ ){
 
 	// Setup the solver
 	DiagonalMatrix<double,Dynamic> W = m_W_diag.asDiagonal();
-	SparseMatrix<double> solver_termA = ( M + timestep_s*timestep_s * Dt * W * W * m_D );
-	solver_dt2_Dt_Wt_W = timestep_s*timestep_s * Dt * W * W;
+	Eigen::SparseMatrix<double> solver_termA = ( M + settings.timestep_s*settings.timestep_s * Dt * W * W * m_D );
+	solver_dt2_Dt_Wt_W = settings.timestep_s*settings.timestep_s * Dt * W * W;
 	solver.compute( solver_termA );
 
 	// Allocate space for our ADMM vars
@@ -177,7 +146,7 @@ bool System::initialize( double timestep_ ){
 	curr_u.setZero();
 	curr_z.resize( m_D.rows() );
 
-	if( m_verbose >= 1 ){
+	if( settings.verbose >= 1 ){
 		std::cout <<  m_x.size()/3 << " nodes, " << forces.size() << " forces" << std::endl;
 	}
 
@@ -189,32 +158,53 @@ bool System::initialize( double timestep_ ){
 
 void System::recompute_weights(){
 
+	int dof = m_masses.size();
+
 	// Update the weight matrix
-#pragma omp parallel for
+	std::vector<Eigen::Triplet<double> > triplets;
+	std::vector<double> weights;
 	for(int i = 0; i < forces.size(); ++i){
-		int Di_rows = forces[i]->getDi()->rows();
-		Eigen::VectorXd weights = Eigen::VectorXd::Ones(Di_rows)*forces[i]->weight;
-		m_W_diag.segment( forces[i]->global_idx, Di_rows ) = weights;
+		forces[i]->get_selector( m_x, triplets, weights );
 	}
+	m_W_diag = Eigen::Map<Eigen::VectorXd>(&weights[0], weights.size());
 
 	// Setup the solver
-	int dof = m_masses.size();
 	Eigen::SparseMatrix<double> M( dof, dof ); // needed because eigen doesn't like diagonal*sparse
 	Eigen::VectorXi nnz = Eigen::VectorXi::Ones( dof ); // non zeros per column
-	M.reserve(nnz);
-	for( int i=0; i<dof; ++i ){ M.coeffRef(i,i) = m_masses[i]; }
-	SparseMatrix<double> Dt = m_D.transpose();
+	M.reserve(nnz); for( int i=0; i<dof; ++i ){ M.coeffRef(i,i) = m_masses[i]; }
 	DiagonalMatrix<double,Dynamic> W = m_W_diag.asDiagonal();
-	solver_dt2_Dt_Wt_W = timestep_s*timestep_s * Dt * W * W;
+	solver_dt2_Dt_Wt_W = settings.timestep_s*settings.timestep_s * m_D.transpose() * W * W;
 	SparseMatrix<double> solver_termA = ( M + solver_dt2_Dt_Wt_W * m_D );
 	solver.compute( solver_termA );
-
 }
 
 
-void System::print_progress( int iter, int max_iters ){
-	double progress = double(iter)/double(max_iters) * 100.0;
-	printf( "\r %.3f %%", progress );
+void System::Settings::parse_args( int argc, char **argv ){
+
+	// Check args with params
+	for( int i=1; i<argc-1; ++i ){
+		std::string arg( argv[i] );
+		std::stringstream val( argv[i+1] );
+		if( arg == "-help" ){ help(); }
+		else if( arg == "-dt" ){ val >> timestep_s; }
+		else if( arg == "-v" ){ val >> verbose; }	
+		else if( arg == "-it" ){ val >> admm_iters; }
+	}
+
+	// Check if last arg is one of our no-param args
+	std::string arg( argv[argc-1] );
+	if( arg == "-help" ){ help(); }
+
+} // end parse settings args
+
+void System::Settings::help(){
+	std::stringstream ss;
+	ss << "\n==========================================\nArgs:\n" <<
+		"\t-dt: time step (s)\n" <<
+		"\t-v: verbosity (higher -> show more)\n" <<
+		"\t-it: # admm iters\n" <<
+	"==========================================\n";
+	printf( "%s", ss.str().c_str() );
 }
 
 

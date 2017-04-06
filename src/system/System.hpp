@@ -28,9 +28,19 @@ namespace admm {
 
 class System {
 public:
-	System() : timestep_s(0.04), elapsed_s(0.0), m_verbose(1), initialized(false) {}
+	System() : elapsed_s(0.0), initialized(false) {}
 
-	double timestep_s; // timestep in seconds
+	// Solver settings
+	// Can be loaded from args: system.settings.parse_args(argc,argv)
+	struct Settings {
+		void parse_args( int argc, char **argv ); // parse from terminal args
+		void help();		// -help	print details
+		double timestep_s;	// -dt <flt>	timestep in seconds (don't change after initialize!)
+		int verbose;		// -v <int>	terminal output level (higher=more)
+		int admm_iters;		// -it <int>	number of admm-solver iterations
+		Settings() : timestep_s(0.04), verbose(1), admm_iters(10) {}
+	} settings ;
+
 	double elapsed_s; // accumulated time in seconds
 
 	// Per-node (x3) data (for x, y, and z)
@@ -50,15 +60,10 @@ public:
 	// Computes global matrices and should only be called once
 	// after all nodes have been added to the system. Once called,
 	// no more nodes can be added or removed.
-	bool initialize( double timestep_ );
+	bool initialize();
 
 	// Performs a system step without any capture/prints
-	bool step( int solver_iters=10 );
-
-	// Set the print output level.
-	// Each higher number includes the prints of lower numbers.
-	// 0=silent, 1=minimal, 2=everything
-	void verbose( unsigned int v ){ m_verbose=v; }
+	bool step();
 
 	// You can change the weights at runtime.
 	// To do so, adjust the weight value associated with whatever forces
@@ -68,15 +73,11 @@ public:
 
 	// Adds a callback function that is executed at the beginning of a step.
 	// This is helpful for things like recording residuals, updating anchor control points, etc...
-	void add_step_callback( std::function<void ( admm::System* )> &cb ){ step_callbacks.push_back( cb ); }
+	std::vector< std::function<void ( admm::System* )> > pre_step_callbacks;
 
 protected:
-	// Users can add callbacks with the "add_step_callback" function
-	// that are executed during the solve.
-	std::vector< std::function<void ( admm::System* )> > step_callbacks;
 
 	// Settings
-	unsigned int m_verbose;
 	bool initialized;
 
 	// Global matrices
@@ -94,9 +95,6 @@ protected:
 	Eigen::VectorXd Dx;
 	Eigen::VectorXd curr_u; // admm dual
 	Eigen::VectorXd curr_z; // admm primal
-
-	// Output variables for printing progress, runtime, etc...
-	void print_progress( int iter, int max_iters );
 
 }; // end class system
 

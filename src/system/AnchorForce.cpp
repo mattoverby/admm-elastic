@@ -1,4 +1,4 @@
-// Copyright (c) 2016, University of Minnesota
+// Copyright (c) 2017, University of Minnesota
 // 
 // ADMM-Elastic Uses the BSD 2-Clause License (http://www.opensource.org/licenses/BSD-2-Clause)
 // Redistribution and use in source and binary forms, with or without modification, are
@@ -32,50 +32,44 @@ void StaticAnchor::initialize( const VectorXd &x, const VectorXd &v, const Vecto
 	pos[0] = x[ idx*3 + 0 ];
 	pos[1] = x[ idx*3 + 1 ];
 	pos[2] = x[ idx*3 + 2 ];
-	weight = 1000.f;
 }
 
-
-void StaticAnchor::computeDi( int dof ){
+void StaticAnchor::get_selector( const Eigen::VectorXd &x, std::vector< Eigen::Triplet<double> > &triplets, std::vector<double> &weights ){
+	global_idx = weights.size();
 	const int col = 3*idx;
-	Eigen::SparseMatrix<double> newDi;
-	newDi.resize(3,dof);
-	newDi.coeffRef(0,col) = 1.0;
-	newDi.coeffRef(1,col+1) = 1.0;
-	newDi.coeffRef(2,col+2) = 1.0;
-	setDi( newDi );
+	for( int i=0; i<3; ++i ){
+		weights.push_back( weight );
+		triplets.push_back( Eigen::Triplet<double>( global_idx+i, col+i, 1.0 ) );
+	}
 }
 
+void StaticAnchor::project( double dt, const VectorXd &Dx, VectorXd &u, VectorXd &z ) const {
 
-void StaticAnchor::update( double dt, const VectorXd &Dx, VectorXd &u, VectorXd &z ) const {
+	Vector3d Dix = Dx.segment<3>( global_idx );
+	Vector3d ui = u.segment<3>( global_idx );
 
-	int Di_rows = getDi()->rows();
-	VectorXd Dix = Dx.segment( global_idx, Di_rows );
-	VectorXd ui = u.segment( global_idx, Di_rows );
-
-	// Update zi and ui
+	// project zi and ui
 	ui += ( Dix - pos );
-	u.segment( global_idx, Di_rows ) = ui;
-	z.segment( global_idx, Di_rows ) = pos;
+	u.segment<3>( global_idx ) = ui;
+	z.segment<3>( global_idx ) = pos;
 }
 
 //
 //	Moving Anchor
 //
 
-void MovingAnchor::computeDi( int dof ){
+void MovingAnchor::get_selector( const Eigen::VectorXd &x, std::vector< Eigen::Triplet<double> > &triplets, std::vector<double> &weights ){
+	global_idx = weights.size();
 	const int col = 3*idx;
-	Eigen::SparseMatrix<double> newDi;
-	newDi.resize(3,dof);
-	newDi.coeffRef(0,col) = 1.0;
-	newDi.coeffRef(1,col+1) = 1.0;
-	newDi.coeffRef(2,col+2) = 1.0;
-	setDi( newDi );
+	for( int i=0; i<3; ++i ){
+		weights.push_back( weight );
+		triplets.push_back( Eigen::Triplet<double>( global_idx+i, col+i, 1.0 ) );
+	}
 }
 
 
-void MovingAnchor::update( double dt, const VectorXd &Dx, VectorXd &u, VectorXd &z ) const {
-	int Di_rows = getDi()->rows();
+void MovingAnchor::project( double dt, const VectorXd &Dx, VectorXd &u, VectorXd &z ) const {
+	int Di_rows = 3;
 	VectorXd Dix = Dx.segment( global_idx, Di_rows );
 	VectorXd ui = u.segment( global_idx, Di_rows );
 	Eigen::Vector3d zi(Di_rows);
@@ -88,7 +82,7 @@ void MovingAnchor::update( double dt, const VectorXd &Dx, VectorXd &u, VectorXd 
 		point -> pos = Dx.segment( global_idx, 3 );
 	}
 
-	// Update zi and ui
+	// project zi and ui
 	ui += ( Dix - zi );
 	u.segment( global_idx, Di_rows ) = ui;
 	z.segment( global_idx, Di_rows ) = zi;

@@ -41,7 +41,7 @@ ${ADMME_INCLUDE_DIRS} set as parent variables during the build.
 
 # license
 
-Copyright (c) 2016 University of Minnesota
+Copyright (c) 2017 University of Minnesota
 
 ADMM-Elastic Uses the BSD 2-Clause License (http://www.opensource.org/licenses/BSD-2-Clause)  
 Redistribution and use in source and binary forms, with or without modification, are

@@ -1,4 +1,4 @@
-// Copyright (c) 2016, University of Minnesota
+// Copyright (c) 2017, University of Minnesota
 // 
 // ADMM-Elastic Uses the BSD 2-Clause License (http://www.opensource.org/licenses/BSD-2-Clause)
 // Redistribution and use in source and binary forms, with or without modification, are
@@ -27,18 +27,17 @@ namespace admm {
 
 class CollisionForce : public Force {
 public:
-	CollisionForce( std::vector< std::shared_ptr<CollisionShape> > collShapes ) : collisionShapes(collShapes) {}
-	void initialize( const Eigen::VectorXd &x, const Eigen::VectorXd &v, const Eigen::VectorXd &masses, const double timestep ){
-		weight=32.f; // This should be adjusted based on stiffness of other dynamics in scene
-	}
-	void computeDi( int dof );
-	void update( double dt, const Eigen::VectorXd &Dx, Eigen::VectorXd &u, Eigen::VectorXd &z ) const;
+	CollisionForce( std::vector< std::shared_ptr<CollisionShape> > &collShapes, double use_weight=32.0 ) : collisionShapes(collShapes) { weight = use_weight; }
+	void initialize( const Eigen::VectorXd &x, const Eigen::VectorXd &v, const Eigen::VectorXd &masses, const double timestep ){ n_nodes = x.size()/3; }
 
-private:
+	void get_selector( const Eigen::VectorXd &x, std::vector< Eigen::Triplet<double> > &triplets, std::vector<double> &weights );
+	void project( double dt, const Eigen::VectorXd &Dx, Eigen::VectorXd &u, Eigen::VectorXd &z ) const;
 	void handleCollisions(Eigen::VectorXd &zi, const Eigen::VectorXd& collFreePositions) const;
 	std::vector< std::shared_ptr<CollisionShape> > collisionShapes;
-	
-	
+
+	// Returns squared constraint violation
+	int Di_rows;
+	int n_nodes;
 };
 
 

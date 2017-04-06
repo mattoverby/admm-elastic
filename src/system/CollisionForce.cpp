@@ -1,4 +1,4 @@
-// Copyright (c) 2016, University of Minnesota
+// Copyright (c) 2017, University of Minnesota
 // 
 // ADMM-Elastic Uses the BSD 2-Clause License (http://www.opensource.org/licenses/BSD-2-Clause)
 // Redistribution and use in source and binary forms, with or without modification, are
@@ -20,30 +20,26 @@
 #include "CollisionForce.hpp"
 
 using namespace admm;
-
 using namespace Eigen;
 
 //// PUBLIC METHODS ////
 	
-void CollisionForce::computeDi( int dof ) { 
-	Eigen::SparseMatrix<double> newDi;
-	newDi.resize(dof,dof);
-	newDi.setIdentity();
-	setDi( newDi );
+void CollisionForce::get_selector( const Eigen::VectorXd &x, std::vector< Eigen::Triplet<double> > &triplets, std::vector<double> &weights ){
+	global_idx = weights.size();
+	Di_rows = x.size();
+	for( int i=0; i<Di_rows; ++i ){
+		triplets.push_back( Triplet<double>(i+global_idx,i,1.0) );
+		weights.push_back( weight );
+	}
 }
 		
-void CollisionForce::update( double dt, const Eigen::VectorXd &Dx, Eigen::VectorXd &u, Eigen::VectorXd &z ) const { 
-	
+void CollisionForce::project( double dt, const Eigen::VectorXd &Dx, Eigen::VectorXd &u, Eigen::VectorXd &z ) const { 
 	// Computing Di * x + ui
-	int Di_rows = getDi()->rows();
 	Eigen::VectorXd Dix = Dx.segment( global_idx, Di_rows );
 	Eigen::VectorXd ui = u.segment( global_idx, Di_rows );
 	Eigen::VectorXd DixPlusUi = Dix + ui;
 	Eigen::VectorXd zi(DixPlusUi.size());
-
 	handleCollisions(zi,DixPlusUi);  // perturb zi as needed to handle collisions
-	//zi = DixPlusUi;
-
 	ui += ( Dix - zi );
 	u.segment( global_idx, Di_rows ) = ui;
 	z.segment( global_idx, Di_rows ) = zi;
@@ -55,25 +51,25 @@ void CollisionForce::update( double dt, const Eigen::VectorXd &Dx, Eigen::Vector
 //// PRIVATE METHODS ////
 
 void CollisionForce::handleCollisions(Eigen::VectorXd &zi, const Eigen::VectorXd& collFreePositions) const{
-	
 	zi = collFreePositions;
-
-	// Nested omp threads
-#pragma omp parallel for
-	for(int i = 0; i < zi.size(); i += 3){
+	const int n_zi = zi.size();
+	for(int i = 0; i < n_zi; i += 3){
+		// Collision shape:
 		Eigen::Vector3d point(zi[i],zi[i+1],zi[i+2]);
-
-		// Triple nested??? no...
-		//#pragma omp parallel for
 		for(int j = 0; j < collisionShapes.size(); j++){
-			if( collisionShapes[j] -> isColliding(point) ){
-					
+			double err = collisionShapes[j]->isColliding(point);
+			if( err > 0 ){
 				point = collisionShapes[j] -> projectOut(point);
 				zi[i] = point[0];
 				zi[i+1] = point[1];
 				zi[i+2] = point[2];
 			} 
 		}	
+
 	}
 }
+
+
+
+
 

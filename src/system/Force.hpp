@@ -1,4 +1,4 @@
-// Copyright (c) 2016, University of Minnesota
+// Copyright (c) 2017, University of Minnesota
 // 
 // ADMM-Elastic Uses the BSD 2-Clause License (http://www.opensource.org/licenses/BSD-2-Clause)
 // Redistribution and use in source and binary forms, with or without modification, are
@@ -35,36 +35,24 @@ namespace admm {
 //	in System::initialize. For certain forces, optimized w_i is known.
 //
 class Force {
-friend class System;
 public:
-	Force() : weight(0.f) { Di.setZero(); }
-	virtual ~Force() {}
-
-	virtual void initialize( const Eigen::VectorXd &x, const Eigen::VectorXd &v, const Eigen::VectorXd &masses, const double timestep ) = 0;
-	virtual void computeDi( int dof ) = 0; // called AFTER initialize!
-	virtual void update( double dt, const Eigen::VectorXd &Dx, Eigen::VectorXd &u, Eigen::VectorXd &z ) const = 0;
-
 	int global_idx; // Global index is the position of this force in the global u and z vectors
 	double weight; // Weight is computed BY the force based on stiffness
 
-protected:
-	// Di should only be manipulated through these function calls (setDi and getDi).
-	// This is a little strange but affords some protection when initializing the system.
-	const Eigen::SparseMatrix<double> *getDi() const { assert(Di.nonZeros()>0); return &Di; }
-	void setDi( Eigen::SparseMatrix<double> &Di_ ){ Di = Di_; }
+	Force() : weight(0.f) {}
+	virtual ~Force() {}
 
-	// Called by System::initialize:
-	virtual void set_global_idx( int idx ){ global_idx = idx; }
+	// Called in System::initialize to compute local variables
+	virtual void initialize( const Eigen::VectorXd &x, const Eigen::VectorXd &v, const Eigen::VectorXd &masses, const double timestep ){}
 
-	// Return the energy of a force. This is used for convergence tests
-//	virtual double getEnergy( const Eigen::VectorXd& Dx, Eigen::VectorXd& grad ) const {
-//		std::cerr << "**Error: getEnergy not implemented" << std::endl; exit(0);
-//	}
+	// Get triplets for the selector (D) matrix, called after initialize
+	virtual void get_selector( const Eigen::VectorXd &x, std::vector< Eigen::Triplet<double> > &triplets, std::vector<double> &weights ) = 0;
 
-private:
-	// Di should only be manipulated through the function calls (setDi and getDi).
-	// TODO not store personal Di to save memory. Currently it's convenient.
-	Eigen::SparseMatrix<double> Di;
+	// Called in System::step
+	virtual void project( double dt, const Eigen::VectorXd &Dx, Eigen::VectorXd &u, Eigen::VectorXd &z ) const = 0;
+
+	// Set an epsilon for collision/sliding/etc...
+	virtual void set_eps( double eps ){}
 
 }; // end class force
 
@@ -76,14 +64,10 @@ class Spring : public Force {
 public:
 	Spring( int idx0_, int idx1_, double stiffness_ ) : idx0(idx0_), idx1(idx1_), stiffness(stiffness_) {}
 	void initialize( const Eigen::VectorXd &x, const Eigen::VectorXd &v, const Eigen::VectorXd &masses, const double timestep );
-	void computeDi( int dof );
-	void update( double dt, const Eigen::VectorXd &Dx, Eigen::VectorXd &u, Eigen::VectorXd &z ) const;
-//	double getEnergy( const Eigen::VectorXd& Dx, Eigen::VectorXd& grad ) const;
-
+	void get_selector( const Eigen::VectorXd &x, std::vector< Eigen::Triplet<double> > &triplets, std::vector<double> &weights );
+	void project( double dt, const Eigen::VectorXd &Dx, Eigen::VectorXd &u, Eigen::VectorXd &z ) const;
 	int idx0, idx1;
 	double stiffness, rest_length;
-
-protected:
 
 }; // end class spring
 
