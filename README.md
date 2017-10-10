@@ -1,6 +1,6 @@
 # NOTE
 
-This code is a bit outdated and I'll be modifying it to include material from our recent [IEEE TVCG paper](http://ieeexplore.ieee.org/document/7990052). Further, I believe there to be some bugs. If you plan to use this code for comparison, I ask that you please wait little while for me to fix up some issues.
+This code is a bit outdated and I'll be modifying it to include material from our recent [IEEE TVCG paper](http://ieeexplore.ieee.org/document/7990052). Also, I believe there to be some bugs. If you plan to use this code for comparison, I ask that you please wait little while for me to fix up some issues.
 
 # admm-elastic
 
