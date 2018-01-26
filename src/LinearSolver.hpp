@@ -23,6 +23,7 @@
 #include "SolverLog.hpp"
 #include <Eigen/SparseCholesky>
 #include <unordered_map>
+#include <memory>
 
 namespace admm {
 

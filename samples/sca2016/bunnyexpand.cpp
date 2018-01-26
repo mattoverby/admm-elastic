@@ -52,9 +52,9 @@ int main(int argc, char *argv[]){
 
 	// Try to init the solver
 	admm::Solver::Settings settings;
-	if( settings.parse_args(argc,argv) ){ return EXIT_SUCCESS; }
 	settings.linsolver = 0; // LDLT
 	settings.gravity = 0;
+	if( settings.parse_args(argc,argv) ){ return EXIT_SUCCESS; }
 	if( !app.solver->initialize(settings) ){ return EXIT_FAILURE; }
 
 	// Create opengl context

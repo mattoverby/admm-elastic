@@ -21,6 +21,7 @@
 #define ADMM_NCMCGSLINEARSOLVER_H
 
 #include "LinearSolver.hpp"
+#include <iostream>
 #include "MCL/GraphColor.hpp"
 #include "Collider.hpp"
 
@@ -40,15 +41,14 @@ public:
 	typedef Eigen::Matrix<double,3,2> Mat32;
 
 	int max_iters;
-	double tol; // convergence tol
-	double omega; // over relaxation
+	double m_tol; // convergence tol
 
 	NodalMultiColorGS( std::shared_ptr<Collider> collider_, const std::unordered_map<int,Vec3> &pins_ ) :
-		collider(collider_), pins(pins_) {
-		max_iters = 50;
-		tol = 0;
-		omega = 1.9;
-	}
+		max_iters(20), m_tol(0), collider(collider_), pins(pins_) {}
+
+	NodalMultiColorGS() : NodalMultiColorGS(
+		std::make_shared<Collider>(Collider()),
+		std::unordered_map<int,Vec3>() ) {}
 
 	void update_system( const SparseMat &A_ ){
 		int dof = A_.rows();
@@ -65,14 +65,13 @@ public:
 		// If we don't have an initial guess for x, use zeros
 		int dof = A.cols();
 		if( x.rows() != dof ){ x = VecX::Zero(dof); }
-		const double omega = std::min( std::max( omega, 0.01 ), 1.99 ); // relax param
 		logger.reset();
 
 		const bool has_pins = pins.size()>0;
 		VecX residual; // used for convergence test (tol>0)
 		double b_norm = 1.0;
-		double tol2 = tol*tol;
-		if( tol > 0 ){ b_norm = b0.squaredNorm(); }
+		double tol2 = m_tol*m_tol;
+		if( m_tol > 0 ){ b_norm = b0.squaredNorm(); }
 
 		// Outer iteration loop
 		int iter = 0;
@@ -103,13 +102,15 @@ public:
 					}
 
 					// Perform the update
-					Vec3 curr_x = segment_update(idx, x, A, b0, omega );
+					Vec3 curr_x = segment_update(idx, x, A, b0, 1.0 );
 
 					// Next, see if the node has a linear constraint
-					Vec3 n, p;
-					bool hit_obstacle = collider->detect_passive( curr_x, n, p );
-					if( hit_obstacle ){
-						curr_x = constrained_segment_update(idx, x, A, b0, omega, n, p );
+					if( collider ){
+						Vec3 n, p;
+						bool hit_obstacle = collider->detect_passive( curr_x, n, p );
+						if( hit_obstacle ){
+							curr_x = constrained_segment_update(idx, x, A, b0, 1.0, n, p );
+						}
 					}
 
 					x.segment<3>(idx*3) = curr_x;
@@ -119,7 +120,7 @@ public:
 			} // end loop colors
 
 			logger.add(x);
-			if( tol > 0 ){
+			if( m_tol > 0 ){
 				residual = b0 - A*x;
 				double err2 = residual.squaredNorm() / b_norm;
 				if( err2 < tol2 ){ break; }
@@ -192,8 +193,8 @@ inline NodalMultiColorGS::Vec3 NodalMultiColorGS::segment_update( int idx, const
 			throw std::runtime_error("Exiting...");
 		}
 
-		double delta_x = (bi[s] - LUx)/aii;
-		new_x[s] = (1.0-omega)*curr_x[s] + omega*delta_x;
+		double x_new = (bi[s] - LUx)/aii;
+		new_x[s] = (1.0-omega)*curr_x[s] + omega*x_new;
 
 	} // end loop segment
 

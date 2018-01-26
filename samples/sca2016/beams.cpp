@@ -37,7 +37,7 @@ void stretch_beams();
 int main(int argc, char **argv){
 
 	admm::Solver::Settings settings;
-	settings.admm_iters = 50;
+	settings.admm_iters = 20;
 	if( settings.parse_args( argc, argv ) ){ return EXIT_SUCCESS; }
 
 	int dim = 3;
