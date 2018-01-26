@@ -7,9 +7,24 @@ University of Minnesota
 
 Materials from the TVCG paper will be added incrementally (samples/solvers/etc...)
 
-# todo
+# notes
 
+This project contains submodules:
+- [mclscene](https://github.com/mattoverby/mclscene)
+- [mcloptlib](https://github.com/mattoverby/mcloptlib)
+
+and has the dependences:
+- Eigen3
+- GLFW
+- OpenGL
+
+Todo:
 - [Stable Neo-Hookean](http://graphics.pixar.com/library/StableElasticity)
+- UzawaCG for self-collisions
+- Penalty collisions for self-collisions
+- Slide constraints
+- Bending force
+- Demos from SCA/TVCG papers
 
 # abstract
 
@@ -38,9 +53,3 @@ BibTex:
 	month={Oct},
 	}
 
-# compiling
-
-This project contains submodules and has the following dependences:
-- Eigen3
-- GLFW
-- OpenGL
