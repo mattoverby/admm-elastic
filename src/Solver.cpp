@@ -67,6 +67,10 @@ void Solver::step(){
 	VecX curr_u = VecX::Zero( curr_z.rows() );
 	VecX solver_termB = VecX::Zero( dof );
 
+	// Perform collision detection
+//	bool detect_passive = m_settings.linsolver!=1;
+//	m_collider->detect( curr_x, detect_passive );
+
 	// Run a timestep
 	int s_i = 0;
 	for( ; s_i < m_settings.admm_iters; ++s_i ){
@@ -156,6 +160,10 @@ void Solver::add_obstacle( std::shared_ptr<PassiveCollision> obj ){
 	m_collider->add_passive_obj(obj);
 }
 
+void Solver::add_dynamic_collider( std::shared_ptr<DynamicCollision> obj ){
+	m_collider->add_dynamic_obj(obj);
+}
+
 bool Solver::initialize( const Settings &settings_ ){
 	using namespace Eigen;
 	m_settings = settings_;
@@ -225,6 +233,12 @@ bool Solver::initialize( const Settings &settings_ ){
 		} break;
 		case 1: {
 			m_linsolver = std::make_shared<NodalMultiColorGS>( NodalMultiColorGS(m_collider,m_pins) );
+			m_settings.collision_w = m_W_diag.maxCoeff()*2.0;
+		} break;
+		case 2: {
+			throw std::runtime_error("TODO: UzawaCG");
+//			m_linsolver = std::make_shared<UzawaCG>( UzawaCG(m_collider,m_pins) );
+			m_settings.collision_w = 1.0;
 		} break;
 	}
 

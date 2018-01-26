@@ -44,7 +44,7 @@ public:
 	double m_tol; // convergence tol
 
 	NodalMultiColorGS( std::shared_ptr<Collider> collider_, const std::unordered_map<int,Vec3> &pins_ ) :
-		max_iters(20), m_tol(0), collider(collider_), pins(pins_) {}
+		max_iters(30), m_tol(0), collider(collider_), pins(pins_) {}
 
 	NodalMultiColorGS() : NodalMultiColorGS(
 		std::make_shared<Collider>(Collider()),
@@ -105,12 +105,10 @@ public:
 					Vec3 curr_x = segment_update(idx, x, A, b0, 1.0 );
 
 					// Next, see if the node has a linear constraint
-					if( collider ){
-						Vec3 n, p;
-						bool hit_obstacle = collider->detect_passive( curr_x, n, p );
-						if( hit_obstacle ){
-							curr_x = constrained_segment_update(idx, x, A, b0, 1.0, n, p );
-						}
+					Vec3 n, p;
+					bool hit_obstacle = collider->detect_passive( idx, curr_x, n, p );
+					if( hit_obstacle ){
+						curr_x = constrained_segment_update(idx, x, A, b0, 1.0, n, p );
 					}
 
 					x.segment<3>(idx*3) = curr_x;

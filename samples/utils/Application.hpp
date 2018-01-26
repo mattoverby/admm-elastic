@@ -73,7 +73,7 @@ public:
 //	inline void update_passive_meshes();
 
 	// Static meshes, they don't do anything except be rendered
-//	inline void add_static_mesh( std::shared_ptr<mcl::TriangleMesh> mesh );
+	inline void add_static_mesh( mcl::TriangleMesh::Ptr mesh );
 
 	// Returns success or failure
 	inline bool display();
@@ -159,16 +159,13 @@ inline void Application::add_obstacle( std::shared_ptr<admm::PassiveCollision> c
 	solver->add_obstacle(passive_meshes.back().collidermesh);
 }
 
-/*
-inline void Application::add_static_meshes( std::vector< std::shared_ptr<mcl::TriangleMesh> > &meshes ){
-	int n_meshes = meshes.size();
-	for( int i=0; i<n_meshes; ++i ){
-		static_meshes.emplace_back( StaticMesh() );
-		static_meshes.back().surface = std::make_shared<mcl::RenderMesh>(meshes[i]);
-		static_meshes.back().surface->phong = mcl::material::Phong::create( mcl::material::Preset::Gunmetal );
-	}
+
+inline void Application::add_static_mesh( mcl::TriangleMesh::Ptr mesh ){
+	static_meshes.emplace_back( StaticMesh() );
+	static_meshes.back().surface = std::make_shared<mcl::RenderMesh>(mesh);
+	static_meshes.back().surface->phong = mcl::material::Phong::create( mcl::material::Preset::Gunmetal );
 }
-*/
+
 /*
 inline void Application::update_passive_meshes(){
 	int n_meshes = passive_meshes.size();

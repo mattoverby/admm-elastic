@@ -93,23 +93,34 @@ private:
 	typedef Eigen::Matrix<int,4,1> Vec4i;
 	typedef Eigen::Matrix<double,Eigen::Dynamic,1> VecX;
 	typedef Eigen::SparseMatrix<double,Eigen::RowMajor> SparseMat;
+	SparseMat m_C;
+	VecX m_c;
 
 public:
 	inline void clear_hits(){
 		passive_hits.clear();
 		dynamic_hits.clear();
+		m_C.resize(1,1);
+		m_c = VecX::Zero(1);
 	}
 
 	// Do a single vertex collision detection test against passive obstacles.
 	// Returns true if intersecting something.
-	inline bool detect_passive( const Vec3 &x, Vec3 &n, Vec3 &p );
+	inline bool detect_passive( int idx, const Vec3 &x, Vec3 &n, Vec3 &p );
 
 	// Returns true if collisions have been detected after a detect_whatever call.
 	inline bool has_collisions() const { return bool(passive_hits.size()) || bool(dynamic_hits.size()); }
 
+	// Create a (equality) contraint matrix with optional weight (stiffness) and
+	// option to include passive collisions. Created from passive_hits and dynamic_hits.
+	inline void make_constraint_matrix( int dof, double weight, bool with_passive=true );
+
+	// Return the contraint matrix
+	inline void get_constraint_matrix( SparseMat &C, VecX &c ){ C = m_C; c = m_c; }
+
 	// Do a round of collision detection and populate the hits vectors.
 	// If dynamic objects are added to the collider, the trees are updated with the current vertices.
-	inline void detect( const VecX &x );
+	inline void detect( const VecX &x, bool with_passive=true );
 
 	// Passive collisions:
 	inline void add_passive_obj( std::shared_ptr<PassiveCollision> obj ){ passive_objs.emplace_back( obj ); }
@@ -126,10 +137,10 @@ public:
 	std::vector<DynamicCollision::Payload> dynamic_hits;
 };
 
-inline bool Collider::detect_passive( const Vec3 &x, Vec3 &n, Vec3 &p ){
+inline bool Collider::detect_passive( int idx, const Vec3 &x, Vec3 &n, Vec3 &p ){
 	const int num_passive = passive_objs.size();
 	if( !num_passive ){ return false; }
-	PassiveCollision::Payload p_payload(-1);
+	PassiveCollision::Payload p_payload(idx);
 	for( int j=0; j<num_passive; ++j ){
 		passive_objs[j]->signed_distance(x, p_payload);
 		if( p_payload.dx < 0 ){
@@ -141,7 +152,7 @@ inline bool Collider::detect_passive( const Vec3 &x, Vec3 &n, Vec3 &p ){
 	return false;
 }
 
-inline void Collider::detect( const VecX &x ){
+inline void Collider::detect( const VecX &x, bool with_passive ){
 
 	const int num_passive = passive_objs.size();
 	const int num_dynamic = dynamic_objs.size();
@@ -165,13 +176,15 @@ inline void Collider::detect( const VecX &x ){
 		//
 		// check passive objects
 		//
-		PassiveCollision::Payload p_payload(i);
-		for( int j=0; j<num_passive; ++j ){
-			passive_objs[j]->signed_distance(curr_x, p_payload);
-		}
-		if( p_payload.dx < 0 ){
-			int thread_idx = omp_get_thread_num();
-			tl_phits[ thread_idx ].emplace_back(p_payload);
+		if( with_passive ){
+			PassiveCollision::Payload p_payload(i);
+			for( int j=0; j<num_passive; ++j ){
+				passive_objs[j]->signed_distance(curr_x, p_payload);
+			}
+			if( p_payload.dx < 0 ){
+				int thread_idx = omp_get_thread_num();
+				tl_phits[ thread_idx ].emplace_back(p_payload);
+			}
 		}
 
 		//
@@ -197,6 +210,56 @@ inline void Collider::detect( const VecX &x ){
 	}
 
 } // end detect
+
+
+inline void Collider::make_constraint_matrix( int dof, double weight, bool with_passive ){
+
+	typedef Eigen::Triplet<double> triplet;
+
+	// If no collisions, send an empty constraint set
+	if( !has_collisions() ){
+		m_C.resize(1,dof);
+		m_C.setZero();
+		m_c = VecX::Zero(1);
+		return;
+	}
+
+	// Get constraint info
+	const int n_p_hits = with_passive ? passive_hits.size() : 0;
+	const int n_d_hits = dynamic_hits.size();
+	const double ck = std::max(0.0,weight);
+	const int c_rows = n_p_hits + n_d_hits;
+
+	m_c = VecX::Zero(c_rows);
+	std::vector<triplet> triplets;
+	triplets.reserve( n_p_hits*3 + n_d_hits*12 );
+
+	// Passive collisions:
+	for( int i=0; i<n_p_hits; ++i ){
+		const PassiveCollision::Payload *h = &passive_hits[i];
+		m_c[i] = ck*h->normal.dot(h->point);
+		triplets.emplace_back( i, h->vert_idx*3+0, ck*h->normal[0] );
+		triplets.emplace_back( i, h->vert_idx*3+1, ck*h->normal[1] );
+		triplets.emplace_back( i, h->vert_idx*3+2, ck*h->normal[2] );
+	}
+
+	// dynamic collisions:
+	for( int i=0; i<n_d_hits; ++i ){
+		const DynamicCollision::Payload *h = &dynamic_hits[i];
+		int ci = i+n_p_hits;
+		triplets.emplace_back( ci, h->vert_idx*3+0, ck*h->normal[0] );
+		triplets.emplace_back( ci, h->vert_idx*3+1, ck*h->normal[1] );
+		triplets.emplace_back( ci, h->vert_idx*3+2, ck*h->normal[2] );
+		for(int j=0; j<3; ++j){
+			triplets.emplace_back( ci, h->face[j]*3+0, -ck*h->normal[0]*h->barys[j] );
+			triplets.emplace_back( ci, h->face[j]*3+1, -ck*h->normal[1]*h->barys[j] );
+			triplets.emplace_back( ci, h->face[j]*3+2, -ck*h->normal[2]*h->barys[j] );
+		}
+	}
+
+	m_C.resize( c_rows, dof );
+	m_C.setFromTriplets( triplets.begin(), triplets.end() );
+}
 
 } // namespace admm
 

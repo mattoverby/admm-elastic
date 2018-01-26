@@ -42,11 +42,12 @@ public:
 		double timestep_s;	// -dt <flt>	timestep in seconds (don't change after initialize!)
 		int verbose;		// -v <int>	terminal output level (higher=more)
 		int admm_iters;		// -it <int>	number of admm solver iterations
-		double gravity;		// -g <flt>	Force of gravity
-		bool record_obj;	// -r		Computes (and prints if verbose) objective value
+		double gravity;		// -g <flt>	force of gravity
+		bool record_obj;	// -r		computes (and prints if verbose) objective value
 		int linsolver;		// -ls <int>	0=LDLT, 1=NCMCGS
+		double collision_w;	// -ck <flt>	collision weights (-1 = auto)
 		Settings() : timestep_s(1.0/24.0), verbose(1), admm_iters(20),
-			gravity(-9.8), record_obj(false), linsolver(0) {}
+			gravity(-9.8), record_obj(false), linsolver(0), collision_w(-1) {}
 	};
 
 	// RuntimeData struct used for logging.
@@ -83,6 +84,9 @@ public:
 
 	// An obstacle is a passive collision object.
 	virtual void add_obstacle( std::shared_ptr<PassiveCollision> obj );
+
+	// A dynamic obstacle has vertices in m_x and is updated every frame
+	virtual void add_dynamic_collider( std::shared_ptr<DynamicCollision> obj );
 
 	// Returns true on success.
 	virtual bool initialize( const Settings &settings_=Settings() );

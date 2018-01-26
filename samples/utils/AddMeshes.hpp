@@ -124,7 +124,7 @@ static inline void binding::add_tetmesh( admm::Solver *solver, std::shared_ptr<m
 		std::shared_ptr<admm::TetMeshCollision> collision_mesh(
 			new admm::TetMeshCollision(mesh, prev_tet_verts)
 		);
-//		solver->m_collider.add_dynamic_obj( collision_mesh );
+		solver->add_dynamic_collider( collision_mesh );
 	}
 
 	// Add individual tet forces
