@@ -163,8 +163,15 @@ void NeoHookeanTet::prox( VecX &zi ) {
 	Mat3 F = Map<Mat3>(zi.data());
 	Vec3 S; Mat3 U, V;
 	signed_svd( F, S, U, V );
-
 	problem.x0 = S;
+
+	// If everything is very low, It is collapsed to a point and the minimize
+	// will likely fail. So we'll just inflate it a bit.
+	const double eps = 1e-6;
+	if( std::abs(S[0]) < eps && std::abs(S[1]) < eps && std::abs(S[2]) < eps ){
+		S[0] = eps; S[1] = eps; S[2] = eps;
+	}
+
 	if( S[2] < 0.0 ){ S[2] = -S[2]; }
 	solver.minimize( problem, S );
 
@@ -255,11 +262,18 @@ void StVKTet::prox( VecX &zi ) {
 	Mat3 F = Map<Mat3>(zi.data());
 	Vec3 S; Mat3 U, V;
 	signed_svd( F, S, U, V );
-
 	problem.x0 = S;
-	if( S[2] < 0.0 ){ S[2] = -S[2]; }
-	solver.minimize( problem, S );
 
+	// If everything is very low, It is collapsed to a point and the minimize
+	// will likely fail. So we'll just inflate it a bit.
+	const double eps = 1e-6;
+	if( std::abs(S[0]) < eps && std::abs(S[1]) < eps && std::abs(S[2]) < eps ){
+		S[0] = eps; S[1] = eps; S[2] = eps;
+	}
+
+	if( S[2] < 0.0 ){ S[2] = -S[2]; }
+
+	solver.minimize( problem, S );
 	Mat3 matp = U * S.asDiagonal() * V.transpose();
 	zi = Map<Vec9>(matp.data());
 

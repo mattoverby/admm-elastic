@@ -28,32 +28,28 @@ Application app;
 void get_pins( mcl::TriangleMesh::Ptr mesh, std::vector<int> &pin_ids, int idx_offset );
 
 int main(int argc, char *argv[]){
-/*
-	// Load the mesh
+
+	admm::Solver::Settings settings;
+	if( settings.parse_args(argc,argv) ){ return EXIT_SUCCESS; }
+
 	std::vector< mcl::TriangleMesh::Ptr > meshes = {
-		mcl::factory::make_plane( 7, 7 ),
-		mcl::factory::make_plane( 7, 7 )
+		mcl::factory::make_plane( 10, 10 ),
+		mcl::factory::make_plane( 10, 10 )
 	};
 
-	meshes[0]->flags = binding::NOCOLLISION | binding::LINEAR;
-	meshes[1]->flags = binding::NOCOLLISION | binding::LINEAR;
+	meshes[0]->flags = binding::NOSELFCOLLISION | binding::LINEAR;
+	meshes[1]->flags = binding::NOSELFCOLLISION | binding::LINEAR;
 	const mcl::XForm<float> xf_left = mcl::xform::make_trans(-2.f, 0.f, 0.f);
 	const mcl::XForm<float> xf_right = mcl::xform::make_trans(2.f, 0.f, 0.f);
 	meshes[0]->apply_xform( xf_left );
 	meshes[1]->apply_xform( xf_right );
 
-	// Apply strain limiting to the left mesh
-	std::vector< mcl::Vec2d > strain_limits = {
-		mcl::Vec2d( 0.8, 1.2 ),
-		mcl::Vec2d( 0.0, 99.0 ),
-	};
-
-	// Parse arguments
-	if( app.parse_args( argc, argv ) ){ return EXIT_SUCCESS; }
-
 	// Add meshes to the system
-	admm::Lame lame = admm::Lame::soft_rubber(); // not sure whats good for cloth
-	app.add_dynamic_meshes( meshes, strain_limits, lame );
+	admm::Lame very_soft_rubber(100,0.1);
+	app.add_dynamic_mesh( meshes[1], very_soft_rubber );
+	very_soft_rubber.limit_min = 0.95;
+	very_soft_rubber.limit_max = 1.05;
+	app.add_dynamic_mesh( meshes[0], very_soft_rubber );
 
 	// Pin corners
 	std::vector<int> pins;
@@ -65,7 +61,7 @@ int main(int argc, char *argv[]){
 	app.solver->set_pins( pins );
 
 	// Try to init the solver
-	if( !app.solver->initialize() ){ return EXIT_FAILURE; }
+	if( !app.solver->initialize(settings) ){ return EXIT_FAILURE; }
 
 	// Create opengl context
 	GLFWwindow* window = app.renderWindow->init();
@@ -100,7 +96,7 @@ int main(int argc, char *argv[]){
 		glfwPollEvents();
 
 	} // end game loop
-*/
+
 	return EXIT_SUCCESS;
 }
 

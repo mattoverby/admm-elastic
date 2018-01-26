@@ -26,7 +26,7 @@
 
 using namespace mcl;
 
-Application app;
+std::unique_ptr<Application> app;
 std::vector<int> left_pins; // -x
 std::vector<Eigen::Vector3d> left_points;
 std::vector<int> right_pins; // +x
@@ -35,9 +35,10 @@ void find_pins( const std::vector< std::shared_ptr<mcl::TetMesh> > &meshes );
 void stretch_beams();
 
 int main(int argc, char **argv){
-/*
-	app.solver->settings.admm_iters = 100;
-	if( app.parse_args( argc, argv ) ){ return EXIT_SUCCESS; }
+
+	admm::Solver::Settings settings;
+	settings.admm_iters = 50;
+	if( settings.parse_args( argc, argv ) ){ return EXIT_SUCCESS; }
 
 	int dim = 3;
 	std::vector< std::shared_ptr<mcl::TetMesh> > meshes = {
@@ -47,9 +48,9 @@ int main(int argc, char **argv){
 	};
 
 	std::vector< int > flags = {
-		binding::NOCOLLISION | binding::LINEAR,
-		binding::NOCOLLISION | binding::NEOHOOKEAN,
-		binding::NOCOLLISION | binding::STVK,
+		binding::NOSELFCOLLISION | binding::LINEAR,
+		binding::NOSELFCOLLISION | binding::NEOHOOKEAN,
+		binding::NOSELFCOLLISION | binding::STVK,
 	};
 
 	if( flags.size() != meshes.size() ){
@@ -80,32 +81,38 @@ int main(int argc, char **argv){
 		}	
 	}
 
+	app = std::unique_ptr<Application>( new Application(settings) );
+
 	// Add the dynamic meshes
 	admm::Lame softRubber(10000000,0.399);
-	app.add_dynamic_meshes( meshes, softRubber );
+	for( int i=0; i<(int)meshes.size(); ++i ){
+		app->add_dynamic_mesh( meshes[i], softRubber );
+	}
 
 	// Add a callback to stretch the beams each frame
-	app.sim_cb = std::function<void ()>(stretch_beams);
+	app->sim_cb = std::function<void ()>(stretch_beams);
 	find_pins(meshes); // initial pin locations
 
 	// Zoom out a bit
-	app.renderWindow->m_camera->fov_deg() = 60.f;
+	app->renderWindow->m_camera->fov_deg() = 60.f;
+	stretch_beams(); // set initial pins
 
-	bool success = app.display();
+	// display() calls initialize
+	bool success = app->display();
 	if( !success ){ return EXIT_FAILURE; }
-*/
+
 	return EXIT_SUCCESS;
 }
 
 void stretch_beams(){
-/*
+
 	int n_left = left_pins.size();
 	int n_pins = n_left + right_pins.size();
 	std::vector<int> pins( n_pins );
 	std::vector<Eigen::Vector3d> points( n_pins );
 
 	// Compute movement:
-	double dt = app.solver->settings.timestep_s;
+	double dt = app->solver->settings().timestep_s;
 	Eigen::Vector3d move = Eigen::Vector3d(1.f,0,0)*dt;
 
 	// Move left and right pins a little
@@ -121,8 +128,8 @@ void stretch_beams(){
 		}
 	}
 
-	app.solver->set_pins( pins, points );
-*/
+	app->solver->set_pins( pins, points );
+
 }
 
 void find_pins( const std::vector< std::shared_ptr<mcl::TetMesh> > &meshes ){

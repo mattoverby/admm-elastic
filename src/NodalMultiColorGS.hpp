@@ -45,7 +45,7 @@ public:
 
 	NodalMultiColorGS( std::shared_ptr<Collider> collider_, const std::unordered_map<int,Vec3> &pins_ ) :
 		collider(collider_), pins(pins_) {
-		max_iters = 30;
+		max_iters = 50;
 		tol = 0;
 		omega = 1.9;
 	}
@@ -73,7 +73,6 @@ public:
 		double b_norm = 1.0;
 		double tol2 = tol*tol;
 		if( tol > 0 ){ b_norm = b0.squaredNorm(); }
-		
 
 		// Outer iteration loop
 		int iter = 0;
@@ -107,13 +106,11 @@ public:
 					Vec3 curr_x = segment_update(idx, x, A, b0, omega );
 
 					// Next, see if the node has a linear constraint
-//						if( m_constraints->nodal_constraints.count(idx) > 0 ){
-//							ConstraintSet::Nodal *nodal_c = &m_constraints->nodal_constraints[idx];
-//							x.segment<3>(idx*3) = constrained_segment_update(idx, x,
-//								A, b, omega, nodal_c->n1, nodal_c->p );
-//							continue;
-//						}
-
+					Vec3 n, p;
+					bool hit_obstacle = collider->detect_passive( curr_x, n, p );
+					if( hit_obstacle ){
+						curr_x = constrained_segment_update(idx, x, A, b0, omega, n, p );
+					}
 
 					x.segment<3>(idx*3) = curr_x;
 
@@ -208,8 +205,8 @@ inline NodalMultiColorGS::Vec3 NodalMultiColorGS::segment_update( int idx, const
 inline NodalMultiColorGS::Vec3 NodalMultiColorGS::constrained_segment_update( int idx, const VecX &x,
 	const SparseMat &A, const VecX &b, double omega, const Vec3 &n, const Vec3 &p ){
 	typedef Eigen::Matrix<double,2,1> Vec2;
-	(void)(omega); // hush warning
 	int idx3 = idx*3;
+	(void)(omega);
 	Vec3 bi = b.segment<3>(idx3);
 	const Vec3 curr_x = x.segment<3>(idx3);
 	Vec3 new_x = curr_x;

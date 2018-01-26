@@ -5,7 +5,11 @@
 [Jie Li](http://www-users.cs.umn.edu/~lixx4611/) and [Rahul Narain](http://rahul.narain.name/)  
 University of Minnesota
 
-Materialf rom the TVCG paper will be added incrementally (samples/solvers/etc...)
+Materials from the TVCG paper will be added incrementally (samples/solvers/etc...)
+
+# todo
+
+- [Stable Neo-Hookean](http://graphics.pixar.com/library/StableElasticity)
 
 # abstract
 

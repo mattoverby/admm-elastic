@@ -26,23 +26,25 @@ using namespace mcl;
 
 
 int main(int argc, char **argv){
-/*
+
 	// Load the mesh
 	std::stringstream spherefile;
 	spherefile << ADMMELASTIC_ROOT_DIR << "/samples/data/sphere";
-	std::vector< mcl::TetMesh::Ptr > meshes = { mcl::TetMesh::create() };
-	mcl::meshio::load_elenode( meshes[0].get(), spherefile.str() );
+	mcl::TetMesh::Ptr mesh = mcl::TetMesh::create();
+	mcl::meshio::load_elenode( mesh.get(), spherefile.str() );
+	mesh->flags |= binding::NOSELFCOLLISION | binding::LINEAR;
 
-	Application app;
-	if( app.parse_args( argc, argv ) ){ return EXIT_SUCCESS; }
+	admm::Solver::Settings settings;
+	settings.linsolver = 1; // NCMCGS
+	if( settings.parse_args( argc, argv ) ){ return EXIT_SUCCESS; }
+	Application app(settings);
 	admm::Lame very_soft_rubber(1000000,0.299);
-	app.add_dynamic_meshes( meshes, very_soft_rubber );
+	app.add_dynamic_mesh( mesh, very_soft_rubber );
 
 	// Add a collision floor
 	float floor_y = -1.f;
-	app.solver->m_collider.add_passive_obj(
-		std::shared_ptr<admm::PassiveCollision>(new admm::Floor(floor_y))
-	);
+	std::shared_ptr<admm::PassiveCollision> floor_collider = 
+		std::make_shared<admm::Floor>( admm::Floor(floor_y) );
 
 	// Add a floor renderable
 	std::shared_ptr<mcl::TriangleMesh> floor = mcl::factory::make_plane(2,2);
@@ -50,19 +52,12 @@ int main(int argc, char **argv){
 		mcl::xform::make_rot(-90.f,mcl::Vec3f(1,0,0)) *
 		mcl::xform::make_scale(4.f,4.f,4.f);
 	floor->apply_xform(xf);
-	std::vector< mcl::TriangleMesh::Ptr > static_meshes = {floor};
 
-	// Add the dynamic mesh, but remove it as a collider to avoid self collision
-	app.add_static_meshes( static_meshes );
-	app.solver->m_collider.dynamic_objs.clear();
-
-	// Sim settings
-	app.solver->settings.admm_iters = 100;
+	app.add_obstacle( floor_collider, floor );
 
 	bool success = app.display();
-
 	if( !success ){ return EXIT_FAILURE; }
-*/
+
 	return EXIT_SUCCESS;
 }
 

@@ -173,7 +173,7 @@ bool test_solver_iters(){
 	settings.gravity = 0;
 	settings.verbose = 0;
 	settings.timestep_s = 1.f/24.f;
-	settings.linsolver = 1; // PCG
+	settings.linsolver = 0; // LDLT
 	solver.energyterms.push_back( tet.t );
 
 	// Add vertex data:
@@ -194,7 +194,7 @@ bool test_solver_iters(){
 		int idx = 9; // fourth tet
 		settings.admm_iters = i;
 		solver.m_x = init_x; // reset
-		if( !solver.initialize() ){ return false; }
+		if( !solver.initialize(settings) ){ return false; }
 
 		// Move out z and step
 		solver.m_x.segment<3>(idx) = Vec3d(200,0,0);
@@ -263,7 +263,7 @@ bool test_inversion(){
 
 		settings.admm_iters = i;
 		solver.m_x = init_x; // reset
-		if( !solver.initialize() ){ return false; }
+		if( !solver.initialize(settings) ){ return false; }
 
 		if( !near(volume(solver.m_x), target_v ) ){
 			std::cerr << "Error in init" << std::endl;
@@ -401,6 +401,10 @@ int main(){
 	success &= test_energy();
 	success &= test_solver_iters();
 	success &= test_inversion();
-	if( !success ){ return EXIT_FAILURE; }
+	if( !success ){
+		std::cerr << "\n**FAILURE**\n" << std::endl;
+		return EXIT_FAILURE;
+	}
+	std::cout << "SUCCESS" << std::endl;
 	return EXIT_SUCCESS;
 }

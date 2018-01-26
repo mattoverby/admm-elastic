@@ -27,6 +27,9 @@
 using namespace admm;
 using namespace Eigen;
 
+Solver::Solver() : initialized(false) {
+	m_collider = std::make_shared<Collider>( Collider() );
+}
 
 void Solver::step(){
 	if( m_settings.verbose > 0 ){
@@ -105,22 +108,48 @@ void Solver::step(){
 
 void Solver::set_pins( const std::vector<int> &inds, const std::vector<Vec3> &points ){
 
+	int n_pins = inds.size();
 	const int dof = m_x.rows();
-	bool pin_in_place = points.size() != inds.size();
+	bool pin_in_place = (int)points.size() != n_pins;
 	if( (dof == 0 && pin_in_place) || (pin_in_place && points.size() > 0) ){
 		throw std::runtime_error("**Solver::set_pins Error: Bad input.");
 	}
 
-	pins.clear();
-	int n_pins = inds.size();
+	m_pins.clear();
 	for( int i=0; i<n_pins; ++i ){
 		int idx = inds[i];
 		if( pin_in_place ){
-			pins[idx] = m_x.segment<3>(idx*3);
+			m_pins[idx] = m_x.segment<3>(idx*3);
 		} else {
-			pins[idx] = points[i];
+			m_pins[idx] = points[i];
 		}
 	}
+
+	// If we're using energy based hard constraints, the pin locations may change
+	// but which vertex is pinned may NOT change (aside from setting them to
+	// active or inactive). So we need to do some extra work here.
+	if( initialized && m_settings.linsolver==0 ){
+
+		// Set all pins inactive, then update to active if they are set
+		std::unordered_map<int, std::shared_ptr<SpringPin> >::iterator pIter = m_pin_energies.begin();
+		for( ; pIter != m_pin_energies.end(); ++pIter ){
+			pIter->second->set_active(false);
+		}
+
+		// Update pin locations/active
+		for( int i=0; i<n_pins; ++i ){
+			int idx = inds[i];
+			pIter = m_pin_energies.find(idx);
+			if( pIter == m_pin_energies.end() ){
+				std::stringstream err;
+				err << "**Solver::set_pins Error: Constraint for " << idx << " not found.\n";
+				throw std::runtime_error(err.str().c_str());
+			}
+			pIter->second->set_active(true);
+			pIter->second->set_pin( m_pins[idx] );
+		}
+
+	} // end set energy-based pins
 }
 
 void Solver::add_obstacle( std::shared_ptr<PassiveCollision> obj ){
@@ -149,6 +178,16 @@ bool Solver::initialize( const Settings &settings_ ){
 	// Clear previous runtime stuff settings
 	m_v.setZero();
 
+	// If we want energy-based constraints, set them up now.
+	// They hurt convergence, fyi.
+	if( m_settings.linsolver==0 ){
+		std::unordered_map<int,Vec3>::iterator pinIter = m_pins.begin();
+		for( ; pinIter != m_pins.end(); ++pinIter ){
+			m_pin_energies[ pinIter->first ] = std::make_shared<SpringPin>( SpringPin(pinIter->first,pinIter->second) );
+			energyterms.emplace_back( m_pin_energies[ pinIter->first ] );			
+		}
+	} // end create energy based hard constraints
+
 	// Set up the selector matrix (D) and weight (W) matrix
 	std::vector<Eigen::Triplet<double> > triplets;
 	std::vector<double> weights;
@@ -156,6 +195,8 @@ bool Solver::initialize( const Settings &settings_ ){
 	for(int i = 0; i < n_energyterms; ++i){
 		energyterms[i]->get_reduction( triplets, weights );
 	}
+
+	// Create the Selector+Reduction matrix
 	m_W_diag = Eigen::Map<VecX>(&weights[0], weights.size());
 	int n_D_rows = weights.size();
 	m_D.resize( n_D_rows, dof );
@@ -180,10 +221,10 @@ bool Solver::initialize( const Settings &settings_ ){
 	// Set up the linear solver
 	switch (m_settings.linsolver){
 		default: {
-			
+			m_linsolver = std::make_shared<LDLTSolver>( LDLTSolver() );
 		} break;
 		case 1: {
-
+			m_linsolver = std::make_shared<NodalMultiColorGS>( NodalMultiColorGS(m_collider,m_pins) );
 		} break;
 	}
 
@@ -191,8 +232,16 @@ bool Solver::initialize( const Settings &settings_ ){
 	if( !m_linsolver ){ throw std::runtime_error("What happened to the global solver?"); }
 	m_linsolver->update_system( solver_termA );
 
+	// Make sure they don't have any collision obstacles
+	if( m_settings.linsolver==0 ){
+		if( m_collider->passive_objs.size() > 0 || m_collider->dynamic_objs.size() > 0 ){
+			throw std::runtime_error("**Solver::add_obstacle Error: No collisions with LDLT solver");
+		}
+	}
+
 	// All done
 	if( m_settings.verbose >= 1 ){ printf("%d nodes, %d energy terms\n", (int)m_x.size()/3, (int)energyterms.size() ); }
+	initialized = true;
 	return true;
 
 } // end init
@@ -211,6 +260,7 @@ bool Solver::Settings::parse_args( int argc, char **argv ){
 		else if( arg == "-it" ){ val >> admm_iters; }
 		else if( arg == "-g" ){ val >> gravity; }
 		else if( arg == "-r" ){ record_obj = true; }
+		else if( arg == "-ls" ){ val >> linsolver; }
 	}
 
 	// Check if last arg is one of our no-param args
@@ -230,6 +280,7 @@ void Solver::Settings::help(){
 		"\t-it: # admm iters\n" <<
 		"\t-g: gravity (m/s^2)\n" <<
 		"\t-r: record objective value \n" <<
+		"\t-ls: linear solver (0=LDLT, 1=NCMCGS) \n" <<
 	"==========================================\n";
 	printf( "%s", ss.str().c_str() );
 }

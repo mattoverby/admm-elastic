@@ -1,4 +1,4 @@
-// Copyright (c) 2017, University of Minnesota
+// Copyright (c) 2016, University of Minnesota
 // 
 // ADMM-Elastic Uses the BSD 2-Clause License (http://www.opensource.org/licenses/BSD-2-Clause)
 // Redistribution and use in source and binary forms, with or without modification, are
@@ -17,65 +17,65 @@
 // IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
 // OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-#ifndef ADMM_TRIENERGYTERM_H
-#define ADMM_TRIENERGYTERM_H 1
+#ifndef ADMM_SPRINGENERGYTERM_H
+#define ADMM_SPRINGENERGYTERM_H 1
 
 #include "EnergyTerm.hpp"
 
 namespace admm {
 
-
 //
-//	Creates a bunch of energy terms from a mesh
+//	To call it a spring is a bit misleading. It's an infinitely hard
+//	hard spring, with energy = inf when violated, zero otherwise.
 //
-template <typename IN_SCALAR, typename TYPE>
-inline void create_tris_from_mesh( std::vector< std::shared_ptr<EnergyTerm> > &energyterms,
-	const IN_SCALAR *verts, const int *inds, int n_tris, const Lame &lame, const int vertex_offset ){
-	typedef Eigen::Matrix<int,3,1> Vec3i;
-	typedef Eigen::Matrix<double,3,1> Vec3;
-	for( int i=0; i<n_tris; ++i ){
-		Vec3i tri(inds[i*3+0], inds[i*3+1], inds[i*3+2]);
-		std::vector<Vec3> triverts = {
-			Vec3( verts[tri[0]*3+0], verts[tri[0]*3+1], verts[tri[0]*3+2] ),
-			Vec3( verts[tri[1]*3+0], verts[tri[1]*3+1], verts[tri[1]*3+2] ),
-			Vec3( verts[tri[2]*3+0], verts[tri[2]*3+1], verts[tri[2]*3+2] )
-		};
-		tri += Vec3i(1,1,1)*vertex_offset;
-		energyterms.emplace_back( std::make_shared<TYPE>( tri, triverts, lame ) );
-	}
-} // end create from mesh
-
-
-//
-//	The tri energy term base class
-//
-class TriEnergyTerm : public EnergyTerm {
+class SpringPin : public EnergyTerm {
 protected:
 	typedef Eigen::Matrix<int,3,1> Vec3i;
 	typedef Eigen::Matrix<double,3,1> Vec3;
 	typedef Eigen::Matrix<double,Eigen::Dynamic,1> VecX;
-	Vec3i tri;
-	Lame lame;
-
-	double area;
+	int idx; // constrained vertex
+	Vec3 pin; // location of the pin
+	bool active;
 	double weight;
-	Eigen::Matrix2d rest_pose;
 
 public:
 	int get_dim() const { return 6; }
 	double get_weight() const { return weight; }
+	void set_pin( const Vec3 &p ){ pin = p; }
+	void set_active( bool a ){ active = a; }
 
-	TriEnergyTerm( const Vec3i &tri_, const std::vector<Vec3> &verts, const Lame &lame_ );
+	SpringPin( int idx_, const Vec3 &pin_ ) : idx(idx_), pin(pin_), active(true) {
+		// Because we usually use bulk mod of rubber for elastics,
+		// We'll make a really strong rubber and use that for pin.
+		admm::Lame lame = admm::Lame::rubber();
+		weight = std::sqrt(lame.bulk_modulus()*2.0);
+	}
 
-	void get_reduction( std::vector< Eigen::Triplet<double> > &triplets );
+	void get_reduction( std::vector< Eigen::Triplet<double> > &triplets ){
+		const int col = 3*idx;
+		triplets.emplace_back( 0, col+0, 1.0 );
+		triplets.emplace_back( 1, col+1, 1.0 );
+		triplets.emplace_back( 2, col+2, 1.0 );
+	}
 
-	// Unless derived from uses linear strain (no area conservation)
-	virtual void prox( VecX &zi );
-	virtual double energy( const VecX &F );
-	virtual double gradient( const VecX &F, VecX &grad );
+	void prox( VecX &zi ){ if( active ){ zi = pin; } }
+
+	double energy( const VecX &F ){
+		if( !active ){ return 0.0; }
+		return weight*(F-pin).norm(); // More useful than 0 and inf
+	}
+
+	double gradient( const VecX &F, VecX &grad ){
+		(void)(F); (void)(grad);
+		throw std::runtime_error("**SpringPin Error: No gradient for hard constraint");
+	}
 
 }; // end class TriEnergyTerm
 
+} // end namespace admm
 
-} // ns admm
-#endif // trienergyterm
+#endif
+
+
+
+

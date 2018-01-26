@@ -100,17 +100,16 @@ public:
 		dynamic_hits.clear();
 	}
 
+	// Do a single vertex collision detection test against passive obstacles.
+	// Returns true if intersecting something.
+	inline bool detect_passive( const Vec3 &x, Vec3 &n, Vec3 &p );
+
 	// Returns true if collisions have been detected after a detect_whatever call.
 	inline bool has_collisions() const { return bool(passive_hits.size()) || bool(dynamic_hits.size()); }
 
 	// Do a round of collision detection and populate the hits vectors.
 	// If dynamic objects are added to the collider, the trees are updated with the current vertices.
 	inline void detect( const VecX &x );
-
-	// Do a round of collision detection on embedded surfaces.
-	// Dynamic objects are updated with the vector x.
-	inline void detect( const VecX &x, const std::vector<Vec4> &barys,
-		const std::vector<int> &embToTet, const std::vector<Vec4i> &tets );
 
 	// Passive collisions:
 	inline void add_passive_obj( std::shared_ptr<PassiveCollision> obj ){ passive_objs.emplace_back( obj ); }
@@ -127,6 +126,20 @@ public:
 	std::vector<DynamicCollision::Payload> dynamic_hits;
 };
 
+inline bool Collider::detect_passive( const Vec3 &x, Vec3 &n, Vec3 &p ){
+	const int num_passive = passive_objs.size();
+	if( !num_passive ){ return false; }
+	PassiveCollision::Payload p_payload(-1);
+	for( int j=0; j<num_passive; ++j ){
+		passive_objs[j]->signed_distance(x, p_payload);
+		if( p_payload.dx < 0 ){
+			n = p_payload.normal;
+			p = p_payload.point;
+			return true;
+		}
+	}
+	return false;
+}
 
 inline void Collider::detect( const VecX &x ){
 
@@ -184,70 +197,6 @@ inline void Collider::detect( const VecX &x ){
 	}
 
 } // end detect
-
-
-inline void Collider::detect( const VecX &x, const std::vector<Vec4> &barys, const std::vector<int> &embToTet, const std::vector<Vec4i> &tets ){
-
-	const int num_passive = passive_objs.size();
-	const int num_dynamic = dynamic_objs.size();
-	if( !num_passive && !num_dynamic ){ return; }
-
-	// Thread local results:
-	const int nt = omp_get_max_threads();
-	std::vector< std::vector<PassiveCollision::Payload> > tl_phits( nt, std::vector<PassiveCollision::Payload>() );
-	std::vector< std::vector<DynamicCollision::Payload> > tl_dhits( nt, std::vector<DynamicCollision::Payload>() );
-	int n_emb_verts = embToTet.size();
-
-	#pragma omp parallel for // Update trees
-	for( int i=0; i<num_dynamic; ++i ){ dynamic_objs[i]->update(x); }
-
-	#pragma omp parallel for // perform collision detection
-	for( int i=0; i<n_emb_verts; ++i ){
-
-		const Vec4i &tet = tets[ embToTet[i] ];
-		const Vec4 bary = barys[ i ];
-		Vec3 curr_x =	x.segment<3>(tet[0]*3) * bary[0] +
-				x.segment<3>(tet[1]*3) * bary[1] +
-				x.segment<3>(tet[2]*3) * bary[2] +
-				x.segment<3>(tet[3]*3) * bary[3];
-
-		{ // check passive objects
-			PassiveCollision::Payload p_payload(i);
-			for( int j=0; j<num_passive; ++j ){
-				passive_objs[j]->signed_distance(curr_x, p_payload);
-			} // end loop objects
-
-			if( p_payload.dx < 0 ){
-				int thread_idx = omp_get_thread_num();
-				tl_phits[ thread_idx ].emplace_back(p_payload);
-			} // end collision detected
-		}
-
-		{ // check dynamic objects
-			DynamicCollision::Payload d_payload(i);
-			d_payload.self_tet = tet;
-			for( int j=0; j<num_dynamic; ++j ){
-				dynamic_objs[j]->signed_distance(curr_x, d_payload);
-			} // end loop dynamic
-
-			if( d_payload.dx < 0 ){
-				int thread_idx = omp_get_thread_num();
-				tl_dhits[ thread_idx ].emplace_back(d_payload);
-			} // end collision detected
-		}
-
-	} // end per vertex collision
-
-	// Combine thread-local results
-	for( int i=0; i<nt; ++i ){
-		std::vector<PassiveCollision::Payload> *tlrp = &tl_phits[i];
-		passive_hits.insert( std::end(passive_hits), std::begin(*tlrp), std::end(*tlrp) );
-		std::vector<DynamicCollision::Payload> *tlrd = &tl_dhits[i];
-		dynamic_hits.insert( std::end(dynamic_hits), std::begin(*tlrd), std::end(*tlrd) );
-	}
-
-} // end detect
-
 
 } // namespace admm
 

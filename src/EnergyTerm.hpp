@@ -39,14 +39,22 @@ public:
 	double mu, lambda;
 	double bulk_modulus() const { return lambda + (2.0/3.0)*mu; }
 
+	// Hard strain limiting (e.g. [0.95,1.05]), default no limit
+	// with  min: -inf to 1, max: 1 to inf.
+	// In practice if max>99 it's basically no limiting.
+	double limit_min, limit_max;
+
 	// k: Youngs (Pa), measure of stretch
 	// v: Poisson, measure of incompressibility
 	Lame( double k, double v ) :
 		mu(k/(2.0*(1.0+v))),
-		lambda(k*v/((1.0+v)*(1.0-2.0*v))) {}
+		lambda(k*v/((1.0+v)*(1.0-2.0*v))),
+		limit_min(-100.0),
+		limit_max(100.0) {}
 
 	// Use custom mu, lambda
-	Lame(){}
+	Lame(): limit_min(-100.0),
+		limit_max(100.0) {}
 };
 
 

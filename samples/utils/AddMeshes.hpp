@@ -52,7 +52,7 @@ namespace binding {
 
 	// Flags that can be added to the mesh->flags member
 	enum MeshFlags {
-		NOCOLLISION = 1 << 1,
+		NOSELFCOLLISION = 1 << 1,
 		LINEAR = 1 << 2, // default when mesh->flags==0
 		NEOHOOKEAN = 1 << 3,
 		STVK = 1 << 4,
@@ -119,7 +119,7 @@ static inline void binding::add_tetmesh( admm::Solver *solver, std::shared_ptr<m
 	}
 
 	// Add a dynamic collider
-	if( !(mesh->flags & NOCOLLISION) ){
+	if( !(mesh->flags & NOSELFCOLLISION) ){
 		mesh->need_faces();
 		std::shared_ptr<admm::TetMeshCollision> collision_mesh(
 			new admm::TetMeshCollision(mesh, prev_tet_verts)
@@ -196,7 +196,7 @@ static inline void binding::add_trimesh( admm::Solver *solver, std::shared_ptr<m
 	}
 
 	// Add a dynamic collider
-	if( !(mesh->flags & NOCOLLISION) ){
+	if( !(mesh->flags & NOSELFCOLLISION) ){
 		std::cerr << "TODO: Add triangle mesh as collision object" << std::endl;
 	}
 

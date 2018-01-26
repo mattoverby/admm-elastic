@@ -28,7 +28,7 @@ bool single_point_init = false;
 void set_vertices();
 
 int main(int argc, char *argv[]){
-/*
+
 	if( argc > 1 ){
 		std::string arg(argv[1]); 
 		if( arg=="point" ){ single_point_init = true; }
@@ -38,22 +38,21 @@ int main(int argc, char *argv[]){
 	// Load the mesh
 	std::stringstream tetfile;
 	tetfile << ADMMELASTIC_ROOT_DIR << "/samples/data/bunny_1124";
-	std::vector< mcl::TetMesh::Ptr > meshes = { mcl::TetMesh::create() };
-	mcl::meshio::load_elenode( meshes[0].get(), tetfile.str() );
-//	meshes[0]->flags = binding::NOCOLLISION | binding::NEOHOOKEAN;
-	meshes[0]->flags = binding::NOCOLLISION | binding::STVK;
-//	meshes[0]->flags = binding::NOCOLLISION | binding::LINEAR;
+	mcl::TetMesh::Ptr mesh = mcl::TetMesh::create();
+	mcl::meshio::load_elenode( mesh.get(), tetfile.str() );
+	mesh->flags |= binding::NOSELFCOLLISION | binding::STVK;
+//	mesh->flags |= binding::NOSELFCOLLISION | binding::LINEAR;
 
 	mcl::XForm<float> scale = mcl::xform::make_scale<float>(10.f,10.f,10.f);
 	mcl::XForm<float> rotate = mcl::xform::make_rot<float>(20.f,mcl::Vec3f(1,0,0));
-	meshes[0]->apply_xform(rotate*scale);
+	mesh->apply_xform(rotate*scale);
 
-	if( app.parse_args( argc, argv ) ){ return EXIT_SUCCESS; }
-	app.add_dynamic_meshes( meshes );
+	app.add_dynamic_mesh( mesh );
 	app.renderWindow->m_camera->fov_deg() = 30.f; // zoom
 
 	// Try to init the solver
 	admm::Solver::Settings settings;
+	if( settings.parse_args(argc,argv) ){ return EXIT_SUCCESS; }
 	settings.linsolver = 0; // LDLT
 	settings.gravity = 0;
 	if( !app.solver->initialize(settings) ){ return EXIT_FAILURE; }
@@ -73,6 +72,7 @@ int main(int argc, char *argv[]){
 	app.dynamic_meshes[0].update( app.solver.get() );
 
 	// Game loop
+	bool runounce = true;
 	while( app.renderWindow->is_open() ){
 
 		//
@@ -81,11 +81,19 @@ int main(int argc, char *argv[]){
 		if( app.controller->sim_running ){
 			app.solver->step();
 			for( int i=0; i<n_d_meshes; ++i ){ app.dynamic_meshes[i].update( app.solver.get() ); }
+			if( single_point_init && runounce ){
+				app.renderWindow->m_camera->eye() = mcl::Vec3f(0,0,10);
+				runounce = false;
+			}
 		} // end run continuously
 		else if( app.controller->sim_dostep ){
 			app.controller->sim_dostep = false;
 			app.solver->step();
 			for( int i=0; i<n_d_meshes; ++i ){ app.dynamic_meshes[i].update( app.solver.get() ); }
+			if( single_point_init && runounce ){
+				app.renderWindow->m_camera->eye() = mcl::Vec3f(0,0,10);
+				runounce = false;
+			}
 		} // end do one step
 
 		//
@@ -95,7 +103,7 @@ int main(int argc, char *argv[]){
 		glfwPollEvents();
 
 	} // end game loop
-*/
+
 	return EXIT_SUCCESS;
 }
 

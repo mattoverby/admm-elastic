@@ -26,11 +26,11 @@ using namespace admm;
 //	TriEnergyTerm
 //
 
-TriEnergyTerm::TriEnergyTerm( const Vec3i &tri_, const std::vector<Vec3> &verts, const Vec2 &strain_lim_, const Lame &lame_ ) :
-	tri(tri_), lame(lame_), strain_limit(strain_lim_), area(0.0), weight(0.0) {
+TriEnergyTerm::TriEnergyTerm( const Vec3i &tri_, const std::vector<Vec3> &verts, const Lame &lame_ ) :
+	tri(tri_), lame(lame_), area(0.0), weight(0.0) {
 
-	if( strain_limit[0] > 1.0 ){ throw std::runtime_error("**TriEnergyTerm Error: Strain limit min should be -inf to 1"); }
-	if( strain_limit[1] < 1.0 ){ throw std::runtime_error("**TriEnergyTerm Error: Strain limit max should be 1 to inf"); }
+	if( lame.limit_min > 1.0 ){ throw std::runtime_error("**TriEnergyTerm Error: Strain limit min should be -inf to 1"); }
+	if( lame.limit_max < 1.0 ){ throw std::runtime_error("**TriEnergyTerm Error: Strain limit max should be 1 to inf"); }
 	Vec3 e12 = verts[1] - verts[0];
 	Vec3 e13 = verts[2] - verts[0];
 	Vec3 n1 = e12.normalized();
@@ -82,14 +82,14 @@ void TriEnergyTerm::prox( VecX &zi ){
 	Vector6d p = Map<Vector6d>(P.data());
 	zi = 0.5 * ( p + zi );
 
-	const bool check_strain = strain_limit[0] > 0.0 || strain_limit[1] < 99.0;
+	const bool check_strain = lame.limit_min > 0.0 || lame.limit_max < 99.0;
 	if( check_strain ){
 		double l_col0 = zi.head<3>().norm();
 		double l_col1 = zi.tail<3>().norm();
-		if( l_col0 < strain_limit[0] ){ zi.head<3>() *= ( strain_limit[0] / l_col0 ); }
-		if( l_col1 < strain_limit[0] ){ zi.tail<3>() *= ( strain_limit[0] / l_col1 ); }
-		if( l_col0 > strain_limit[1] ){ zi.head<3>() *= ( strain_limit[1] / l_col0 ); }
-		if( l_col1 > strain_limit[1] ){ zi.tail<3>() *= ( strain_limit[1] / l_col1 ); }
+		if( l_col0 < lame.limit_min ){ zi.head<3>() *= ( lame.limit_min / l_col0 ); }
+		if( l_col1 < lame.limit_min ){ zi.tail<3>() *= ( lame.limit_min / l_col1 ); }
+		if( l_col0 > lame.limit_max ){ zi.head<3>() *= ( lame.limit_max / l_col0 ); }
+		if( l_col1 > lame.limit_max ){ zi.tail<3>() *= ( lame.limit_max / l_col1 ); }
 	}
 
 }

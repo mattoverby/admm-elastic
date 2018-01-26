@@ -22,6 +22,7 @@
 
 #include "Collider.hpp"
 #include "EnergyTerm.hpp"
+#include "SpringEnergyTerm.hpp"
 #include "ExplicitForce.hpp"
 #include "LinearSolver.hpp"
 
@@ -36,7 +37,7 @@ public:
 
 	// Solver settings
 	struct Settings {
-		bool parse_args( int argc, char **argv ); // parse from terminal args
+		bool parse_args( int argc, char **argv ); // parse from terminal args. Returns true if help()
 		void help();		// -help	print details, parse_args returns true if used
 		double timestep_s;	// -dt <flt>	timestep in seconds (don't change after initialize!)
 		int verbose;		// -v <int>	terminal output level (higher=more)
@@ -45,7 +46,7 @@ public:
 		bool record_obj;	// -r		Computes (and prints if verbose) objective value
 		int linsolver;		// -ls <int>	0=LDLT, 1=NCMCGS
 		Settings() : timestep_s(1.0/24.0), verbose(1), admm_iters(20),
-			gravity(-9.8), record_obj(false), linsolver(1) {}
+			gravity(-9.8), record_obj(false), linsolver(0) {}
 	};
 
 	// RuntimeData struct used for logging.
@@ -59,6 +60,7 @@ public:
 		void print( const Settings &settings );
 	};
 
+	Solver();
 
 	// Per-node (x3) data (for x, y, and z)
 	VecX m_x; // node positions, scaled x3
@@ -97,11 +99,13 @@ public:
 protected:
 	Settings m_settings; // copied from init
 	RuntimeData m_runtime; // reset each iteration
+	bool initialized; // has init been called?
 
 	// Solver used in the global step
 	std::shared_ptr<LinearSolver> m_linsolver;
 	std::shared_ptr<Collider> m_collider;
-	std::unordered_map<int,Vec3> pins; // index -> location
+	std::unordered_map<int,Vec3> m_pins; // vert idx -> location
+	std::unordered_map<int, std::shared_ptr<SpringPin> > m_pin_energies;
 
 	// Global matrices
 	SparseMat m_D, m_Dt; // reduction matrix

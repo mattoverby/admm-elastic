@@ -21,7 +21,8 @@
 
 
 //
-// A helper class for OpenGL/physics interopt
+// A helper class for OpenGL/physics interopt.
+// Kinda clunky but works for now
 //
 
 #ifndef ADMM_APPLICATION_H
@@ -52,25 +53,24 @@ public:
 	std::shared_ptr<admm::Solver> solver;
 	std::shared_ptr<mcl::RenderWindow> renderWindow;
 	std::shared_ptr<AppController> controller;
+	admm::Solver::Settings settings;
 
-	Application();
+	Application( const admm::Solver::Settings &settings = admm::Solver::Settings() );
 
-	// Parse command line arguments (calls solver's parse args too)
-	// Returns true if help() is called and we want to exit.
-//	inline bool parse_args( int argc, char **argv );
+	// Adds a deformable tet mesh
+	inline void add_dynamic_mesh( mcl::TetMesh::Ptr mesh,
+		const admm::Lame &lame = admm::Lame::rubber() );
 
-	// Dynamic meshes are simulated and subject to self/other collision
-//	inline void add_dynamic_meshes( std::vector< std::shared_ptr<mcl::TetMesh> > &meshes,
-//		const admm::Lame &lame = admm::Lame::rubber() );
+	// Adds a deformable triangle mesh
+	inline void add_dynamic_mesh( mcl::TriangleMesh::Ptr mesh,
+		const admm::Lame &lame = admm::Lame::rubber() );
 
-//	inline void add_dynamic_meshes( std::vector< std::shared_ptr<mcl::TriangleMesh> > &meshes,
-//		const std::vector< mcl::Vec2d > &strain_limits, const admm::Lame &lame = admm::Lame::rubber() );
-
-	// Passive meshes aren't simulated, but act as collision objects.
-//	inline void add_obstacle( std::vector< std::shared_ptr<mcl::TetMesh> > &meshes );
+	// Obstacles aren't simulated, but act as collision objects.
+	inline void add_obstacle( std::shared_ptr<admm::PassiveCollision> c,
+		mcl::TriangleMesh::Ptr surf );
 
 	// updates renderables and collision bvh
-	inline void update_passive_meshes();
+//	inline void update_passive_meshes();
 
 	// Static meshes, they don't do anything except be rendered
 //	inline void add_static_mesh( std::shared_ptr<mcl::TriangleMesh> mesh );
@@ -98,7 +98,7 @@ public:
 
 	struct PassiveMesh {
 		std::shared_ptr<mcl::RenderMesh> surface;
-		std::shared_ptr<admm::PassiveMesh> collidermesh;
+		std::shared_ptr<admm::PassiveCollision> collidermesh;
 	};
 
 	struct StaticMesh {
@@ -122,53 +122,43 @@ private:
 //	Implementation
 //
 
-Application::Application() : ss_counter(0), initialized(false) {
+Application::Application( const admm::Solver::Settings &settings_ ) : settings(settings_), ss_counter(0), initialized(false) {
 	solver = std::make_shared<admm::Solver>();
 	renderWindow = std::make_shared<mcl::RenderWindow>();
 	controller = std::make_shared<AppController>();
 	renderWindow->set_controller( controller );
 }
-/*
-inline void Application::add_dynamic_meshes( std::vector< std::shared_ptr<mcl::TetMesh> > &meshes, const admm::Lame &lame ){
-	int n_meshes = meshes.size();
-	for( int i=0; i<n_meshes; ++i ){
-		meshes[i]->need_faces();
-		dynamic_meshes.emplace_back( DynamicMesh() );
-		dynamic_meshes.back().mesh_type = 1;
-		dynamic_meshes.back().solver_v = solver->m_x.rows()/3;
-		dynamic_meshes.back().tetmesh = meshes[i];
-		dynamic_meshes.back().surface = std::make_shared<mcl::RenderMesh>( meshes[i], mcl::RenderMesh::DYNAMIC );
-		binding::add_tetmesh( solver.get(), meshes[i], lame, solver->settings.verbose>0 );
-	}
+
+inline void Application::add_dynamic_mesh( mcl::TetMesh::Ptr mesh, const admm::Lame &lame ){
+	mesh->need_normals();
+	dynamic_meshes.emplace_back( DynamicMesh() );
+	dynamic_meshes.back().mesh_type = 1;
+	dynamic_meshes.back().solver_v = solver->m_x.rows()/3; // global vertex idx
+	dynamic_meshes.back().tetmesh = mesh; // copy the ptr
+	dynamic_meshes.back().surface = std::make_shared<mcl::RenderMesh>( mesh, mcl::RenderMesh::DYNAMIC );
+	binding::add_tetmesh( solver.get(), mesh, lame, settings.verbose );
 }
-*/
-/*
-inline void Application::add_dynamic_mesh( std::shared_ptr<mcl::TriangleMesh> meshes,
-	const std::vector< mcl::Vec2d > &strain_limits, const admm::Lame &lame ){
-	int n_meshes = meshes.size();
-	for( int i=0; i<n_meshes; ++i ){
-		meshes[i]->need_normals();
-		dynamic_meshes.emplace_back( DynamicMesh() );
-		dynamic_meshes.back().mesh_type = 0;
-		dynamic_meshes.back().solver_v = solver->m_x.rows()/3;
-		dynamic_meshes.back().trimesh = meshes[i];
-		dynamic_meshes.back().surface = std::make_shared<mcl::RenderMesh>( meshes[i], mcl::RenderMesh::DYNAMIC );
-		binding::add_trimesh( solver.get(), meshes[i], strain_limits[i], lame, solver->settings.verbose>0 );
-	}
+
+
+inline void Application::add_dynamic_mesh( mcl::TriangleMesh::Ptr mesh, const admm::Lame &lame ){
+	mesh->need_normals();
+	dynamic_meshes.emplace_back( DynamicMesh() );
+	dynamic_meshes.back().mesh_type = 0;
+	dynamic_meshes.back().solver_v = solver->m_x.rows()/3; // global vertex idx
+	dynamic_meshes.back().trimesh = mesh; // copy the ptr
+	dynamic_meshes.back().surface = std::make_shared<mcl::RenderMesh>( mesh, mcl::RenderMesh::DYNAMIC );
+	binding::add_trimesh( solver.get(), mesh, lame, settings.verbose );
 }
-*/
-/*
-inline void Application::add_passive_meshes( std::vector< std::shared_ptr<mcl::TetMesh> > &meshes ){
-	int n_meshes = meshes.size();
-	for( int i=0; i<n_meshes; ++i ){
-		passive_meshes.emplace_back( PassiveMesh() );
-		passive_meshes.back().surface = std::make_shared<mcl::RenderMesh>(meshes[i]);
-		passive_meshes.back().surface->phong = mcl::material::Phong::create( mcl::material::Preset::Gunmetal );
-		passive_meshes.back().collidermesh = std::make_shared<admm::PassiveMesh>( admm::PassiveMesh(meshes[i]) );
-		solver->add_obstacle(passive_meshes.back().collidermesh);
-	}
+
+
+inline void Application::add_obstacle( std::shared_ptr<admm::PassiveCollision> c, mcl::TriangleMesh::Ptr surf ){
+	passive_meshes.emplace_back( PassiveMesh() );
+	passive_meshes.back().surface = std::make_shared<mcl::RenderMesh>(surf);
+	passive_meshes.back().surface->phong = mcl::material::Phong::create( mcl::material::Preset::Gunmetal );
+	passive_meshes.back().collidermesh = c;
+	solver->add_obstacle(passive_meshes.back().collidermesh);
 }
-*/
+
 /*
 inline void Application::add_static_meshes( std::vector< std::shared_ptr<mcl::TriangleMesh> > &meshes ){
 	int n_meshes = meshes.size();
@@ -179,7 +169,7 @@ inline void Application::add_static_meshes( std::vector< std::shared_ptr<mcl::Tr
 	}
 }
 */
-
+/*
 inline void Application::update_passive_meshes(){
 	int n_meshes = passive_meshes.size();
 	for( int i=0; i<n_meshes; ++i ){
@@ -189,17 +179,12 @@ inline void Application::update_passive_meshes(){
 		}
 	}
 }
-
-//inline bool Application::parse_args( int argc, char **argv ){
-//	return solver->settings.parse_args( argc, argv );
-//}
-
-
+*/
 // Returns success or failure
 inline bool Application::display(){
 
 	// Try to init the solver
-	if( !solver->initialize() ){ return false; }
+	if( !solver->initialize(settings) ){ return false; }
 
 	// Create opengl context
 	GLFWwindow* window = renderWindow->init();
@@ -213,6 +198,7 @@ inline bool Application::display(){
 	int n_d_meshes = dynamic_meshes.size();
 	for( int i=0; i<n_d_meshes; ++i ){
 		renderWindow->add_mesh( dynamic_meshes[i].surface );
+		dynamic_meshes[i].update( solver.get() );
 	}
 	int n_p_meshes = passive_meshes.size();
 	for( int i=0; i<n_p_meshes; ++i ){
