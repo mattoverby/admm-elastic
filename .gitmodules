@@ -1,0 +1,6 @@
+[submodule "deps/mclscene"]
+	path = deps/mclscene
+	url = https://github.com/mattoverby/mclscene.git
+[submodule "deps/mcloptlib"]
+	path = deps/mcloptlib
+	url = https://github.com/mattoverby/mcloptlib.git
