@@ -1,6 +1,6 @@
 # NOTE
 
-This code is a bit outdated and I'll be modifying it to include material from our recent [IEEE TVCG paper](http://ieeexplore.ieee.org/document/7990052). Also, I believe there to be some bugs. If you need to use this code for comparison, please send me an email for access to the dev branch!
+Please see the [dev branch](https://github.com/mattoverby/admm-elastic/tree/admm-elastic-dev) until I get more materials implemented. It contains the base solver and a few examples for now.
 
 # admm-elastic
 
