@@ -1,24 +1,25 @@
-#
-#	The easiest way to include this project in your own is
-#	to add it as a subdirectory, then use the ADMME_INCLUDE_DIRS
-#	and ADMME_LIBRARIES cmake variables set (in parent scope) by this script.
-#	See admm-elastic-samples for an example.
-#
-
 cmake_minimum_required(VERSION 2.6)
 project(admm-elastic C CXX)
 
+############################################################
 #
-#	Build Mode
+#	Build Options
 #
+############################################################
+
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11")
 set(CMAKE_BUILD_TYPE Release)
-option(ADMME_VERIFY "Use admm-elastic verification checks" OFF) # Run additional verification steps for debugging
-option(ADMME_BUILD_SAMPLES "Build admm-elastic samples" ON)
-if( ADMME_VERIFY )
-	add_definitions( -DPDADMM_VERIFY )
-endif()
+set(CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake" ${CMAKE_MODULE_PATH})
 
+file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/output")
+add_definitions(-DADMMELASTIC_OUTPUT_DIR="${CMAKE_CURRENT_BINARY_DIR}/output")
+add_definitions(-DADMMELASTIC_ROOT_DIR="${CMAKE_CURRENT_SOURCE_DIR}")
+option(MCL_BUILD_SAMPLES "Build mcl library samples" OFF)
+
+# Lots of warnings
+if(CMAKE_COMPILER_IS_GNUCC OR CMAKE_COMPILER_IS_GNUCXX)
+	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Wextra -Wno-long-long")
+endif()
 
 ############################################################
 #
@@ -26,57 +27,56 @@ endif()
 #
 ############################################################
 
-
-# Eigen library (header only)
-set( EIGEN_INCLUDE "${CMAKE_CURRENT_SOURCE_DIR}/deps/Eigen3" )
-include_directories( SYSTEM ${EIGEN_INCLUDE} ) # SYSTEM hushes warnings
-
 # OpenMP
-# Should add OMP nested, but will leave disabled (default) for now
 find_package(OpenMP)
-if (OPENMP_FOUND)
+if(OPENMP_FOUND)
 	set (CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${OpenMP_C_FLAGS}")
 	set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${OpenMP_CXX_FLAGS}")
 endif()
 
-# CppOptimizationLibrary (header only)
-set( CPPMIN_DIR "${CMAKE_CURRENT_SOURCE_DIR}/deps/cppoptlib" )
-include_directories( ${CPPMIN_DIR}/include )
+# Eigen3 (header only)
+#find_package(Eigen3 REQUIRED)
+set(EIGEN3_INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/deps/Eigen3" )
+include_directories(SYSTEM ${EIGEN3_INCLUDE_DIR})
 
-# Set the include dirs
-set( ADMME_INCLUDE_DIRS
-	${CMAKE_CURRENT_SOURCE_DIR}/src/system
-	${CMAKE_CURRENT_SOURCE_DIR}/src/collision
-)
+# mcloptlib (header only), submodule in deps/
+set( MCLOPTLIB_DIR "${CMAKE_CURRENT_SOURCE_DIR}/deps/mcloptlib" )
+include_directories( ${MCLOPTLIB_DIR}/include )
 
-# Create a variable containing all of the source code
-set( ADMME_SRCS
-	src/system/System.hpp			src/system/System.cpp
-	src/system/Force.hpp			src/system/Force.cpp
-	src/system/ExplicitForce.hpp		src/system/ExplicitForce.cpp
-	src/system/TriangleForce.hpp		src/system/TriangleForce.cpp
-	src/system/AnchorForce.hpp		src/system/AnchorForce.cpp
-	src/system/TetForce.hpp			src/system/TetForce.cpp
-	src/system/BendForce.hpp		src/system/BendForce.cpp
-	src/system/CollisionForce.hpp		src/system/CollisionForce.cpp
-	src/collision/CollisionShape.hpp
-	src/collision/CollisionCylinder.hpp
-	src/collision/CollisionSphere.hpp
-	src/collision/CollisionFloor.hpp
+# mclscene (header only), submodule in deps/
+set( MCLSCENE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/deps/mclscene" )
+add_definitions( -DMCL_USE_GLEW )
+include_directories(SYSTEM ${MCLSCENE_DIR}/include )
+
+# glfw3
+find_package(GLFW 3 REQUIRED)
+include_directories(SYSTEM ${GLFW_INCLUDE_DIR})
+
+# glew
+find_package(GLEW REQUIRED)
+include_directories(SYSTEM ${GLEW_INCLUDE_DIR})
+
+# opengl
+find_package(OpenGL 3.2 REQUIRED)
+include_directories(SYSTEM ${OPENGL_INCLUDE_DIR})
+
+# Add project sources
+include_directories( ${CMAKE_CURRENT_SOURCE_DIR}/src )
+set( ADMMELASTIC_SRCS
+	src/Solver.cpp
+	src/ExplicitForce.cpp
+	src/TetEnergyTerm.cpp
+	src/TriEnergyTerm.cpp
 )
 
 # Finally, create the library
-include_directories( ${ADMME_INCLUDE_DIRS} )
-add_library( admmelastic ${ADMME_SRCS} )
-set( ADMME_LIBRARIES admmelastic )
-
-# Set the parent scope variables
-get_directory_property(HasParent PARENT_DIRECTORY)
-if(HasParent)
-	set( ADMME_LIBRARIES ${ADMME_LIBRARIES} PARENT_SCOPE )
-	set( ADMME_INCLUDE_DIRS ${ADMME_INCLUDE_DIRS} PARENT_SCOPE )
-endif(HasParent)
-
+add_library( admmelastic ${ADMMELASTIC_SRCS} )
+link_libraries( admmelastic ${MCLSCENE_LIBRARIES} )
+set( RENDER_LIBS 
+	${OPENGL_LIBRARIES}
+	${GLEW_LIBRARIES}
+	${GLFW_LIBRARIES}
+)
 
 ############################################################
 #
@@ -84,13 +84,16 @@ endif(HasParent)
 #
 ############################################################
 
-if( ADMME_BUILD_SAMPLES )
+add_subdirectory( ${CMAKE_CURRENT_SOURCE_DIR}/samples )
 
-add_executable( singletet ${CMAKE_CURRENT_SOURCE_DIR}/samples/singletet.cpp )
-target_link_libraries( singletet ${ADMME_LIBRARIES} )
+enable_testing()
 
-add_executable( singlenode ${CMAKE_CURRENT_SOURCE_DIR}/samples/singlenode.cpp )
-target_link_libraries( singlenode ${ADMME_LIBRARIES} )
+add_executable(test_lineartet samples/tests/test_lineartet.cpp)
+target_link_libraries(test_lineartet admmelastic)
+add_test(test_lineartet test_lineartet)
 
-endif()
+#add_executable(test_convergence samples/tests/test_convergence.cpp)
+#target_link_libraries(test_convergence admmelastic)
+#add_test(test_convergence test_convergence)
+
 
