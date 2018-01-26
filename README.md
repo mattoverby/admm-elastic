@@ -25,6 +25,7 @@ Todo:
 - Slide constraints
 - Bending force
 - Demos from SCA/TVCG papers
+- More/better tests
 
 # abstract
 
