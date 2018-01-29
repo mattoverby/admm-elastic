@@ -111,16 +111,13 @@ public:
 	// Returns true if collisions have been detected after a detect_whatever call.
 	inline bool has_collisions() const { return bool(passive_hits.size()) || bool(dynamic_hits.size()); }
 
-	// Create a (equality) contraint matrix with optional weight (stiffness) and
-	// option to include passive collisions. Created from passive_hits and dynamic_hits.
-	inline void make_constraint_matrix( int dof, double weight, bool with_passive=true );
-
-	// Return the contraint matrix
-	inline void get_constraint_matrix( SparseMat &C, VecX &c ){ C = m_C; c = m_c; }
-
 	// Do a round of collision detection and populate the hits vectors.
 	// If dynamic objects are added to the collider, the trees are updated with the current vertices.
-	inline void detect( const VecX &x, bool with_passive=true );
+	// If size of inds=0, all verts are detected.
+	inline void detect( const std::vector<int> &inds, const VecX &x, bool with_passive=true );
+
+	// Moves all vertex locations to a state of non-penetration.
+	inline void resolve( VecX &x );
 
 	// Passive collisions:
 	inline void add_passive_obj( std::shared_ptr<PassiveCollision> obj ){ passive_objs.emplace_back( obj ); }
@@ -152,17 +149,18 @@ inline bool Collider::detect_passive( int idx, const Vec3 &x, Vec3 &n, Vec3 &p )
 	return false;
 }
 
-inline void Collider::detect( const VecX &x, bool with_passive ){
+inline void Collider::detect( const std::vector<int> &inds, const VecX &x, bool with_passive ){
 
 	const int num_passive = passive_objs.size();
 	const int num_dynamic = dynamic_objs.size();
 	if( !num_passive && !num_dynamic ){ return; }
+	bool detect_all = inds.size()==0;
 
 	// Thread local results:
 	const int nt = omp_get_max_threads();
 	std::vector< std::vector<PassiveCollision::Payload> > tl_phits( nt, std::vector<PassiveCollision::Payload>() );
 	std::vector< std::vector<DynamicCollision::Payload> > tl_dhits( nt, std::vector<DynamicCollision::Payload>() );
-	int n_verts = x.rows()/3;
+	int n_verts = detect_all ? x.rows()/3 : inds.size();
 
 	// Update trees in dynamic object
 	#pragma omp parallel for
@@ -171,13 +169,15 @@ inline void Collider::detect( const VecX &x, bool with_passive ){
 	#pragma omp parallel for
 	for( int i=0; i<n_verts; ++i ){
 
-		Vec3 curr_x = x.segment<3>(i*3);
+		int idx = i;
+		if( !detect_all ){ idx = inds[i]; }
+		Vec3 curr_x = x.segment<3>(idx*3);
 
 		//
 		// check passive objects
 		//
 		if( with_passive ){
-			PassiveCollision::Payload p_payload(i);
+			PassiveCollision::Payload p_payload(idx);
 			for( int j=0; j<num_passive; ++j ){
 				passive_objs[j]->signed_distance(curr_x, p_payload);
 			}
@@ -190,7 +190,7 @@ inline void Collider::detect( const VecX &x, bool with_passive ){
 		//
 		// check dynamic objects
 		//
-		DynamicCollision::Payload d_payload(i);
+		DynamicCollision::Payload d_payload(idx);
 		for( int j=0; j<num_dynamic; ++j ){
 			dynamic_objs[j]->signed_distance(curr_x, d_payload);
 		}
@@ -210,56 +210,6 @@ inline void Collider::detect( const VecX &x, bool with_passive ){
 	}
 
 } // end detect
-
-
-inline void Collider::make_constraint_matrix( int dof, double weight, bool with_passive ){
-
-	typedef Eigen::Triplet<double> triplet;
-
-	// If no collisions, send an empty constraint set
-	if( !has_collisions() ){
-		m_C.resize(1,dof);
-		m_C.setZero();
-		m_c = VecX::Zero(1);
-		return;
-	}
-
-	// Get constraint info
-	const int n_p_hits = with_passive ? passive_hits.size() : 0;
-	const int n_d_hits = dynamic_hits.size();
-	const double ck = std::max(0.0,weight);
-	const int c_rows = n_p_hits + n_d_hits;
-
-	m_c = VecX::Zero(c_rows);
-	std::vector<triplet> triplets;
-	triplets.reserve( n_p_hits*3 + n_d_hits*12 );
-
-	// Passive collisions:
-	for( int i=0; i<n_p_hits; ++i ){
-		const PassiveCollision::Payload *h = &passive_hits[i];
-		m_c[i] = ck*h->normal.dot(h->point);
-		triplets.emplace_back( i, h->vert_idx*3+0, ck*h->normal[0] );
-		triplets.emplace_back( i, h->vert_idx*3+1, ck*h->normal[1] );
-		triplets.emplace_back( i, h->vert_idx*3+2, ck*h->normal[2] );
-	}
-
-	// dynamic collisions:
-	for( int i=0; i<n_d_hits; ++i ){
-		const DynamicCollision::Payload *h = &dynamic_hits[i];
-		int ci = i+n_p_hits;
-		triplets.emplace_back( ci, h->vert_idx*3+0, ck*h->normal[0] );
-		triplets.emplace_back( ci, h->vert_idx*3+1, ck*h->normal[1] );
-		triplets.emplace_back( ci, h->vert_idx*3+2, ck*h->normal[2] );
-		for(int j=0; j<3; ++j){
-			triplets.emplace_back( ci, h->face[j]*3+0, -ck*h->normal[0]*h->barys[j] );
-			triplets.emplace_back( ci, h->face[j]*3+1, -ck*h->normal[1]*h->barys[j] );
-			triplets.emplace_back( ci, h->face[j]*3+2, -ck*h->normal[2]*h->barys[j] );
-		}
-	}
-
-	m_C.resize( c_rows, dof );
-	m_C.setFromTriplets( triplets.begin(), triplets.end() );
-}
 
 } // namespace admm
 

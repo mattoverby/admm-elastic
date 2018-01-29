@@ -23,7 +23,7 @@
 #include "LinearSolver.hpp"
 #include <iostream>
 #include "MCL/GraphColor.hpp"
-#include "Collider.hpp"
+#include "ConstraintSet.hpp"
 
 namespace admm {
 
@@ -43,12 +43,10 @@ public:
 	int max_iters;
 	double m_tol; // convergence tol
 
-	NodalMultiColorGS( std::shared_ptr<Collider> collider_, const std::unordered_map<int,Vec3> &pins_ ) :
-		max_iters(30), m_tol(0), collider(collider_), pins(pins_) {}
+	NodalMultiColorGS( std::shared_ptr<ConstraintSet> constraints_ ) :
+		max_iters(50), m_tol(1e-10), constraints(constraints_) {}
 
-	NodalMultiColorGS() : NodalMultiColorGS(
-		std::make_shared<Collider>(Collider()),
-		std::unordered_map<int,Vec3>() ) {}
+	NodalMultiColorGS() : NodalMultiColorGS(std::make_shared<ConstraintSet>(ConstraintSet())) {}
 
 	void update_system( const SparseMat &A_ ){
 		int dof = A_.rows();
@@ -67,11 +65,27 @@ public:
 		if( x.rows() != dof ){ x = VecX::Zero(dof); }
 		logger.reset();
 
-		const bool has_pins = pins.size()>0;
+		// Make constraint matrix if needed
+		if( constraints->matrix_needs_update ){
+			constraints->make_matrix(dof,false,true);
+			constraints->get_matrix(dof,C,c);
+		}
+
+		// Create coupled matrix
+		SparseMat AplusCtC = A;
+		VecX b = b0;
+		if( C.nonZeros() > 0 ){
+			SparseMat Ct = C.transpose();
+			AplusCtC += Ct*C;
+			b += Ct*c;
+		}
+
+		// Other runtime vars
+		const bool has_pins = constraints->pins.size()>0;
 		VecX residual; // used for convergence test (tol>0)
 		double b_norm = 1.0;
 		double tol2 = m_tol*m_tol;
-		if( m_tol > 0 ){ b_norm = b0.squaredNorm(); }
+		if( m_tol > 0 ){ b_norm = b.squaredNorm(); }
 
 		// Outer iteration loop
 		int iter = 0;
@@ -94,21 +108,21 @@ public:
 
 					// First, check if the node is pinned, which has highest priority
 					if( has_pins ){
-						PinIter curr_pin = pins.find(idx);
-						if( curr_pin != pins.end() ){
+						PinIter curr_pin = constraints->pins.find(idx);
+						if( curr_pin != constraints->pins.end() ){
 							x.segment<3>(idx*3) = curr_pin->second;
 							continue;
 						}
 					}
 
 					// Perform the update
-					Vec3 curr_x = segment_update(idx, x, A, b0, 1.0 );
+					Vec3 curr_x = segment_update(idx, x, AplusCtC, b, 1.0 );
 
 					// Next, see if the node has a linear constraint
 					Vec3 n, p;
-					bool hit_obstacle = collider->detect_passive( idx, curr_x, n, p );
+					bool hit_obstacle = constraints->collider->detect_passive( idx, curr_x, n, p );
 					if( hit_obstacle ){
-						curr_x = constrained_segment_update(idx, x, A, b0, 1.0, n, p );
+						curr_x = constrained_segment_update(idx, x, AplusCtC, b, 1.0, n, p );
 					}
 
 					x.segment<3>(idx*3) = curr_x;
@@ -119,14 +133,14 @@ public:
 
 			logger.add(x);
 			if( m_tol > 0 ){
-				residual = b0 - A*x;
+				residual = b0 - AplusCtC*x;
 				double err2 = residual.squaredNorm() / b_norm;
 				if( err2 < tol2 ){ break; }
 			}
 
 		} // end loop GS iters
 
-		logger.finalize(A,x,b0);
+		logger.finalize(AplusCtC,x,b);
 		return iter;
 	} // end gs solve
 
@@ -135,10 +149,10 @@ public:
 
 protected:
 
-	std::shared_ptr<Collider> collider;
-	const std::unordered_map<int,Vec3> &pins; // index -> location
+	std::shared_ptr<ConstraintSet> constraints;
 	std::vector< std::vector<int> > colors;
-	SparseMat A; // copy of matrices
+	SparseMat A, C; // copy of matrices
+	VecX c;
 
 	static inline Vec3 segment_update( int idx, const VecX &x,
 		const SparseMat &A, const VecX &b, double omega );

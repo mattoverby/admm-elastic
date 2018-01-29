@@ -27,22 +27,29 @@ using namespace mcl;
 
 int main(int argc, char **argv){
 
-	mcl::TetMesh::Ptr mesh = mcl::TetMesh::create();
+	std::vector<mcl::TetMesh::Ptr> meshes = {
+		mcl::TetMesh::create(),
+		mcl::TetMesh::create(),
+	};
+
 	std::stringstream file;
-	file << ADMMELASTIC_ROOT_DIR << "/samples/data/torus";
-	mcl::meshio::load_elenode( mesh.get(), file.str() );
-	mesh->flags |= binding::LINEAR;
-	mcl::XForm<float> xft = mcl::xform::make_trans(0.f,2.f,0.f);
-	mcl::XForm<float> xfr = mcl::xform::make_rot(-3.f,mcl::Vec3f(1,0,0));
-	mesh->apply_xform(xft*xfr);
+	file << ADMMELASTIC_ROOT_DIR << "/samples/data/box768";
+	for( int i=0; i<(int)meshes.size(); ++i ){
+		mcl::meshio::load_elenode( meshes[i].get(), file.str() );
+		meshes[i]->flags |= binding::LINEAR;
+		float trans_up = i*2.f;
+		mcl::XForm<float> xf = mcl::xform::make_trans(0.f,trans_up,0.f);
+		meshes[i]->apply_xform(xf);
+	}
 
 	admm::Solver::Settings settings;
-	settings.linsolver = 2; // UzawaCG
-	settings.admm_iters = 10;
+	settings.linsolver = 2; // Uzawa
 	if( settings.parse_args( argc, argv ) ){ return EXIT_SUCCESS; }
 	Application app(settings);
-	admm::Lame squishy = admm::Lame(1000000,0.1); 
-	app.add_dynamic_mesh( mesh, squishy );
+
+	for( int i=0; i<(int)meshes.size(); ++i ){
+		app.add_dynamic_mesh( meshes[i], admm::Lame::rubber() );
+	}
 
 	// Add a collision floor
 	float floor_y = -1.f;

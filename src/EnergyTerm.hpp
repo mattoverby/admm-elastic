@@ -35,6 +35,7 @@ class Lame {
 public:
 	static Lame rubber(){ return Lame(10000000,0.499); } // true rubber
 	static Lame soft_rubber(){ return Lame(10000000,0.399); } // fun rubber!
+	static Lame very_soft_rubber(){ return Lame(1000000,0.299); } // more funner!
 
 	double mu, lambda;
 	double bulk_modulus() const { return lambda + (2.0/3.0)*mu; }

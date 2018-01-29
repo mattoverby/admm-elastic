@@ -125,6 +125,12 @@ static inline void binding::add_tetmesh( admm::Solver *solver, std::shared_ptr<m
 			new admm::TetMeshCollision(mesh, prev_tet_verts)
 		);
 		solver->add_dynamic_collider( collision_mesh );
+		std::vector<int> surf_inds;
+		mesh->surface_inds( surf_inds );
+		int n_inds = surf_inds.size();
+		for( int i=0; i<n_inds; ++i ){
+			solver->surface_inds.emplace_back( surf_inds[i]+prev_tet_verts );
+		}
 	}
 
 	// Add individual tet forces

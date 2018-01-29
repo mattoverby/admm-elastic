@@ -22,13 +22,14 @@
 #include <fstream>
 #include <unordered_set>
 #include "NodalMultiColorGS.hpp"
+#include "UzawaCG.hpp"
 #include <unordered_map>
 
 using namespace admm;
 using namespace Eigen;
 
 Solver::Solver() : initialized(false) {
-	m_collider = std::make_shared<Collider>( Collider() );
+	m_constraints = std::make_shared<ConstraintSet>( ConstraintSet() );
 }
 
 void Solver::step(){
@@ -66,10 +67,11 @@ void Solver::step(){
 	VecX curr_z = m_D*m_x;
 	VecX curr_u = VecX::Zero( curr_z.rows() );
 	VecX solver_termB = VecX::Zero( dof );
-
-	// Perform collision detection
-//	bool detect_passive = m_settings.linsolver!=1;
-//	m_collider->detect( curr_x, detect_passive );
+	bool detect_passive = m_settings.linsolver!=1;
+	bool penalty_collisions = m_constraints->constraint_w > 1.0;
+	m_constraints->collider->clear_hits();
+//	m_constraints->collider->detect( curr_x, detect_passive );
+//	m_constraints->matrix_needs_update = true;
 
 	// Run a timestep
 	int s_i = 0;
@@ -92,6 +94,10 @@ void Solver::step(){
 			energyterms[i]->update( m_D, curr_x, curr_z, curr_u );
 		}
 		m_runtime.local_ms += t.elapsed_ms();
+
+		if( !penalty_collisions ){ m_constraints->collider->clear_hits(); }
+		m_constraints->collider->detect( surface_inds, curr_x, detect_passive );
+		m_constraints->matrix_needs_update = true;
 
 		// Global step
 		t.reset();
@@ -119,20 +125,21 @@ void Solver::set_pins( const std::vector<int> &inds, const std::vector<Vec3> &po
 		throw std::runtime_error("**Solver::set_pins Error: Bad input.");
 	}
 
-	m_pins.clear();
+	m_constraints->matrix_needs_update = true;
+	m_constraints->pins.clear();
 	for( int i=0; i<n_pins; ++i ){
 		int idx = inds[i];
 		if( pin_in_place ){
-			m_pins[idx] = m_x.segment<3>(idx*3);
+			m_constraints->pins[idx] = m_x.segment<3>(idx*3);
 		} else {
-			m_pins[idx] = points[i];
+			m_constraints->pins[idx] = points[i];
 		}
 	}
 
 	// If we're using energy based hard constraints, the pin locations may change
 	// but which vertex is pinned may NOT change (aside from setting them to
 	// active or inactive). So we need to do some extra work here.
-	if( initialized && m_settings.linsolver==0 ){
+	if( initialized && (m_settings.linsolver==0 || m_settings.linsolver==2) ){
 
 		// Set all pins inactive, then update to active if they are set
 		std::unordered_map<int, std::shared_ptr<SpringPin> >::iterator pIter = m_pin_energies.begin();
@@ -150,18 +157,18 @@ void Solver::set_pins( const std::vector<int> &inds, const std::vector<Vec3> &po
 				throw std::runtime_error(err.str().c_str());
 			}
 			pIter->second->set_active(true);
-			pIter->second->set_pin( m_pins[idx] );
+			pIter->second->set_pin( m_constraints->pins[idx] );
 		}
 
 	} // end set energy-based pins
 }
 
 void Solver::add_obstacle( std::shared_ptr<PassiveCollision> obj ){
-	m_collider->add_passive_obj(obj);
+	m_constraints->collider->add_passive_obj(obj);
 }
 
 void Solver::add_dynamic_collider( std::shared_ptr<DynamicCollision> obj ){
-	m_collider->add_dynamic_obj(obj);
+	m_constraints->collider->add_dynamic_obj(obj);
 }
 
 bool Solver::initialize( const Settings &settings_ ){
@@ -187,10 +194,9 @@ bool Solver::initialize( const Settings &settings_ ){
 	m_v.setZero();
 
 	// If we want energy-based constraints, set them up now.
-	// They hurt convergence, fyi.
-	if( m_settings.linsolver==0 ){
-		std::unordered_map<int,Vec3>::iterator pinIter = m_pins.begin();
-		for( ; pinIter != m_pins.end(); ++pinIter ){
+	if( m_settings.linsolver==0 || m_settings.linsolver==2){
+		std::unordered_map<int,Vec3>::iterator pinIter = m_constraints->pins.begin();
+		for( ; pinIter != m_constraints->pins.end(); ++pinIter ){
 			m_pin_energies[ pinIter->first ] = std::make_shared<SpringPin>( SpringPin(pinIter->first,pinIter->second) );
 			energyterms.emplace_back( m_pin_energies[ pinIter->first ] );			
 		}
@@ -232,23 +238,31 @@ bool Solver::initialize( const Settings &settings_ ){
 			m_linsolver = std::make_shared<LDLTSolver>( LDLTSolver() );
 		} break;
 		case 1: {
-			m_linsolver = std::make_shared<NodalMultiColorGS>( NodalMultiColorGS(m_collider,m_pins) );
-			m_settings.collision_w = m_W_diag.maxCoeff()*2.0;
+			m_linsolver = std::make_shared<NodalMultiColorGS>( NodalMultiColorGS(m_constraints) );
+			m_constraints->constraint_w = std::sqrt(m_W_diag.maxCoeff()*3.0);
 		} break;
 		case 2: {
-			throw std::runtime_error("TODO: UzawaCG");
-//			m_linsolver = std::make_shared<UzawaCG>( UzawaCG(m_collider,m_pins) );
-			m_settings.collision_w = 1.0;
+			m_linsolver = std::make_shared<UzawaCG>( UzawaCG(m_constraints) );
+			m_constraints->constraint_w = 1.0;
+			// Uzawa solver needs odd number of iterations due to the way collisions
+			// are handled. Specifically, they are fully resolved on even iterations, thus
+			// not detected on the odd ones and penetration may occur at the end
+			// of the timestep. A quick hack for now is to make sure we have odd iters...
+			if( m_settings.admm_iters % 2 == 0 ){
+				m_settings.admm_iters++;
+			}
 		} break;
 	}
 
 	// If we haven't set a global solver, make one:
 	if( !m_linsolver ){ throw std::runtime_error("What happened to the global solver?"); }
+	if( m_settings.constraint_w > 0.0 ){ m_constraints->constraint_w = m_settings.constraint_w; }
 	m_linsolver->update_system( solver_termA );
 
 	// Make sure they don't have any collision obstacles
 	if( m_settings.linsolver==0 ){
-		if( m_collider->passive_objs.size() > 0 || m_collider->dynamic_objs.size() > 0 ){
+		if( m_constraints->collider->passive_objs.size() > 0 ||
+			m_constraints->collider->dynamic_objs.size() > 0 ){
 			throw std::runtime_error("**Solver::add_obstacle Error: No collisions with LDLT solver");
 		}
 	}

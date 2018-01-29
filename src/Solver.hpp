@@ -20,7 +20,7 @@
 #ifndef ADMM_SOLVER_H
 #define ADMM_SOLVER_H 1
 
-#include "Collider.hpp"
+#include "ConstraintSet.hpp"
 #include "EnergyTerm.hpp"
 #include "SpringEnergyTerm.hpp"
 #include "ExplicitForce.hpp"
@@ -45,9 +45,9 @@ public:
 		double gravity;		// -g <flt>	force of gravity
 		bool record_obj;	// -r		computes (and prints if verbose) objective value
 		int linsolver;		// -ls <int>	0=LDLT, 1=NCMCGS
-		double collision_w;	// -ck <flt>	collision weights (-1 = auto)
-		Settings() : timestep_s(1.0/24.0), verbose(1), admm_iters(20),
-			gravity(-9.8), record_obj(false), linsolver(0), collision_w(-1) {}
+		double constraint_w;	// -ck <flt>	constraint weights (-1 = auto)
+		Settings() : timestep_s(1.0/24.0), verbose(1), admm_iters(10),
+			gravity(-9.8), record_obj(false), linsolver(0), constraint_w(-1) {}
 	};
 
 	// RuntimeData struct used for logging.
@@ -67,6 +67,7 @@ public:
 	VecX m_x; // node positions, scaled x3
 	VecX m_v; // node velocities, scaled x3
 	VecX m_masses; // node masses, scaled x3
+	std::vector<int> surface_inds; // indices of surface vertices
 
 	std::vector< std::shared_ptr<ExplicitForce> > ext_forces; // external/explicit forces
 	std::vector< std::shared_ptr<EnergyTerm> > energyterms; // minimized (implicit)
@@ -107,8 +108,7 @@ protected:
 
 	// Solver used in the global step
 	std::shared_ptr<LinearSolver> m_linsolver;
-	std::shared_ptr<Collider> m_collider;
-	std::unordered_map<int,Vec3> m_pins; // vert idx -> location
+	std::shared_ptr<ConstraintSet> m_constraints;
 	std::unordered_map<int, std::shared_ptr<SpringPin> > m_pin_energies;
 
 	// Global matrices
