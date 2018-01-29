@@ -42,7 +42,7 @@ public:
 	std::shared_ptr<ConstraintSet> constraints;
 
 	UzawaCG( std::shared_ptr<ConstraintSet> constraints_ ) :
-		max_iters(20), m_tol(0), constraints(constraints_) {
+		max_iters(20), m_tol(1e-10), constraints(constraints_) {
 		cholesky = std::unique_ptr<Cholesky>( new Cholesky() );
 	}
 
@@ -56,14 +56,13 @@ public:
 	// Solve the linear system
 	int solve( VecX &x, const VecX &b0 ){
 		using namespace Eigen;
+		logger.reset();
 
 		// Make constraint matrix if needed
 		int dof = A.cols();
-		if( constraints->matrix_needs_update ){
-			constraints->make_matrix(dof,true,true);
-			constraints->get_matrix(dof,C,c);
-			y = VecX::Zero(c.rows());
-		}
+		constraints->make_matrix(dof,true,true);
+		constraints->get_matrix(dof,C,c);
+		if( y.rows() != C.rows() ){ y = VecX::Zero(c.rows()); }
 
 		// If there are no constraints, just use the
 		// prefactored linear solve.
@@ -96,9 +95,11 @@ public:
 			x -= alpha * q2;
 			y += alpha * d;
 			r -= alpha * q3;
+
+			// Exit if resid is low enough
+			logger.add(x);
 			if( r.squaredNorm() < tol2 ){ break; }
 
-			// Update step
 			denom = d.dot(q3);
 			if( is_zero(denom) ){ break; }
 			double beta = r.dot(q3) / denom;
@@ -106,6 +107,7 @@ public:
 
 		} // end cg iters
 
+		logger.finalize(A,x,b0);
 		return iter;
 
 	} // end uzawa solve

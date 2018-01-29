@@ -59,17 +59,13 @@ public:
 	}
 
 	int solve( VecX &x, const VecX &b0 ){
+		logger.reset();
 
 		// If we don't have an initial guess for x, use zeros
 		int dof = A.cols();
 		if( x.rows() != dof ){ x = VecX::Zero(dof); }
-		logger.reset();
-
-		// Make constraint matrix if needed
-		if( constraints->matrix_needs_update ){
-			constraints->make_matrix(dof,false,true);
-			constraints->get_matrix(dof,C,c);
-		}
+		constraints->make_matrix(dof,false,true);
+		constraints->get_matrix(dof,C,c);
 
 		// Create coupled matrix
 		SparseMat AplusCtC = A;

@@ -70,8 +70,6 @@ void Solver::step(){
 	bool detect_passive = m_settings.linsolver!=1;
 	bool penalty_collisions = m_constraints->constraint_w > 1.0;
 	m_constraints->collider->clear_hits();
-//	m_constraints->collider->detect( curr_x, detect_passive );
-//	m_constraints->matrix_needs_update = true;
 
 	// Run a timestep
 	int s_i = 0;
@@ -97,7 +95,6 @@ void Solver::step(){
 
 		if( !penalty_collisions ){ m_constraints->collider->clear_hits(); }
 		m_constraints->collider->detect( surface_inds, curr_x, detect_passive );
-		m_constraints->matrix_needs_update = true;
 
 		// Global step
 		t.reset();
@@ -125,7 +122,6 @@ void Solver::set_pins( const std::vector<int> &inds, const std::vector<Vec3> &po
 		throw std::runtime_error("**Solver::set_pins Error: Bad input.");
 	}
 
-	m_constraints->matrix_needs_update = true;
 	m_constraints->pins.clear();
 	for( int i=0; i<n_pins; ++i ){
 		int idx = inds[i];

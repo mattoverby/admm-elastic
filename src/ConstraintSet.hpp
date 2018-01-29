@@ -31,12 +31,11 @@ public:
 	typedef Eigen::Matrix<double,Eigen::Dynamic,1> VecX;
 	typedef Eigen::SparseMatrix<double,Eigen::RowMajor> SparseMat;
 
-	bool matrix_needs_update;
-	double constraint_w; // constraint stiffness
+	double constraint_w; // constraint stiffness (1 with hard constraints)
 	std::shared_ptr<Collider> collider;
 	std::unordered_map<int,Vec3> pins; // index -> location
 
-	ConstraintSet() : matrix_needs_update(true), constraint_w(1.0) {
+	ConstraintSet() : constraint_w(1.0) {
 		collider = std::make_shared<Collider>(Collider());
 	}
 
@@ -74,13 +73,15 @@ inline void ConstraintSet::get_matrix( int dof, SparseMat &C, VecX &c ){
 
 inline void ConstraintSet::make_matrix( int dof, bool add_passive_collisions, bool add_dynamic_collisions ){
 
+	bool avoid_duplicate = true;
+	bool row_per_node = false;
+
 	// Get constraint info
 	int n_p_hits = add_passive_collisions ? collider->passive_hits.size() : 0;
 	int n_d_hits = add_dynamic_collisions ? collider->dynamic_hits.size() : 0;
 	double ck = std::max(0.0,constraint_w);
 	int c_rows = n_p_hits + n_d_hits;
-
-	bool avoid_duplicate = true;
+	if( row_per_node ){ c_rows = dof/3; }
 	std::vector<double> constrained( dof/3, 0.f );
 
 	m_c = VecX::Zero(c_rows);
@@ -96,6 +97,7 @@ inline void ConstraintSet::make_matrix( int dof, bool add_passive_collisions, bo
 		}
 
 		int ci = i;
+		if( row_per_node ){ ci = h->vert_idx; }
 		m_c[ci] = ck*h->normal.dot(h->point);
 		triplets.emplace_back( ci, h->vert_idx*3+0, ck*h->normal[0] );
 		triplets.emplace_back( ci, h->vert_idx*3+1, ck*h->normal[1] );
@@ -111,6 +113,7 @@ inline void ConstraintSet::make_matrix( int dof, bool add_passive_collisions, bo
 		}
 
 		int ci = i+n_p_hits;
+		if( row_per_node ){ ci = h->vert_idx; }
 		triplets.emplace_back( ci, h->vert_idx*3+0, ck*h->normal[0] );
 		triplets.emplace_back( ci, h->vert_idx*3+1, ck*h->normal[1] );
 		triplets.emplace_back( ci, h->vert_idx*3+2, ck*h->normal[2] );
@@ -123,7 +126,6 @@ inline void ConstraintSet::make_matrix( int dof, bool add_passive_collisions, bo
 
 	m_C.resize( c_rows, dof );
 	m_C.setFromTriplets( triplets.begin(), triplets.end() );
-	matrix_needs_update = false;
 }
 
 

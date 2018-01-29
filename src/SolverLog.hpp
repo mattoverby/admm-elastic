@@ -30,6 +30,9 @@ public:
 	typedef Eigen::Matrix<double,Eigen::Dynamic,1> VecX;
 	typedef Eigen::SparseMatrix<double,Eigen::RowMajor> SparseMat;
 
+	// SolverLog keeps track of convergence, and will only work
+	// when x_star is set as input. This requires you to run
+	// the simulation first, then re-run with a known solution.
 	SolverLog(){ x_star=VecX::Zero(1); }
 
 	void reset(){
