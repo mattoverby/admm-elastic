@@ -74,6 +74,9 @@ public:
 			SparseMat Ct = C.transpose();
 			AplusCtC += Ct*C;
 			b += Ct*c;
+			mcl::graphcolor::color_matrix<double>( AplusCtC, colors, 3 );
+		} else {
+			mcl::graphcolor::color_matrix<double>( A, colors, 3 );
 		}
 
 		// Other runtime vars
