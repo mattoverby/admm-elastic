@@ -20,12 +20,10 @@ and has the dependences:
 
 Todo:
 - [Stable Neo-Hookean](http://graphics.pixar.com/library/StableElasticity)
-- UzawaCG for self-collisions
-- Penalty collisions for self-collisions
 - Slide constraints
 - Bending force
 - Demos from SCA/TVCG papers
-- More/better tests
+- More unit tests
 
 # abstract
 
