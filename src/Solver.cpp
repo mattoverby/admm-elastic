@@ -58,6 +58,9 @@ void Solver::step(){
 		for( int i=0; i<n_nodes; ++i ){ m_v[i*3+1] += dt*m_settings.gravity; }
 	}
 
+	// Storing some of these variables as members can reduce allocation overhead
+	// and speed up run time.
+
 	// Position without elasticity/constraints
 	VecX x_bar = m_x + dt * m_v;
 	VecX M_xbar = m_masses.asDiagonal() * x_bar;
@@ -67,9 +70,10 @@ void Solver::step(){
 	VecX curr_z = m_D*m_x;
 	VecX curr_u = VecX::Zero( curr_z.rows() );
 	VecX solver_termB = VecX::Zero( dof );
+
+	// Passive collisions are detected each GS iteration,
+	// so we'll skip them in the global collision detection loop.
 	bool detect_passive = m_settings.linsolver!=1;
-	bool penalty_collisions = m_constraints->constraint_w > 1.0;
-	m_constraints->collider->clear_hits();
 
 	// Run a timestep
 	int s_i = 0;
@@ -93,7 +97,7 @@ void Solver::step(){
 		}
 		m_runtime.local_ms += t.elapsed_ms();
 
-		if( !penalty_collisions ){ m_constraints->collider->clear_hits(); }
+		m_constraints->collider->clear_hits();
 		m_constraints->collider->detect( surface_inds, curr_x, detect_passive );
 
 		// Global step
@@ -240,13 +244,6 @@ bool Solver::initialize( const Settings &settings_ ){
 		case 2: {
 			m_linsolver = std::make_shared<UzawaCG>( UzawaCG(m_constraints) );
 			m_constraints->constraint_w = 1.0;
-			// Uzawa solver needs odd number of iterations due to the way collisions
-			// are handled. Specifically, they are fully resolved on even iterations, thus
-			// not detected on the odd ones and penetration may occur at the end
-			// of the timestep. A quick hack for now is to make sure we have odd iters...
-			if( m_settings.admm_iters % 2 == 0 ){
-				m_settings.admm_iters++;
-			}
 		} break;
 	}
 
