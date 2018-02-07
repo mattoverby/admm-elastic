@@ -29,8 +29,6 @@ namespace admm {
 
 //
 // Nodal-Constrained Multi-Color Gauss-Seidel
-// Stopping criterion from
-// http://web.cecs.pdx.edu/~gerry/class/ME448/notes_2012/pdf/stoppingCriteria.pdf
 //
 class NodalMultiColorGS : public LinearSolver {
 public:

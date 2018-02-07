@@ -183,8 +183,8 @@ void NeoHookeanTet::prox( VecX &zi ) {
 double NeoHookeanTet::energy( const VecX &F_ ) {
 	Matrix<double,9,1> Fcopy = F_;
 	Matrix<double,3,3> F = Map<Matrix<double,3,3> >(Fcopy.data());
-	Vec3 S; Mat3 U, Vt;
-	signed_svd( F, S, U, Vt );
+	Vec3 S; Mat3 U, V;
+	signed_svd( F, S, U, V );
 	problem.x0 = S;
 	if( S[2] < 0.0 ){ S[2] = -S[2]; }
 	return problem.value(S)*volume;
@@ -196,8 +196,8 @@ double NeoHookeanTet::gradient( const VecX &F_, VecX &grad ) {
 	if( grad.rows() != 3 ){
 		throw std::runtime_error("**NeoHookeanTet::gradient Error: grad not dim 3");
 	}
-	Vec3 S; Mat3 U, Vt;
-	signed_svd( F, S, U, Vt );
+	Vec3 S; Mat3 U, V;
+	signed_svd( F, S, U, V );
 	problem.x0 = S;
 	if( S[2] < 0.0 ){ S[2] = -S[2]; }
 	Vec3 g = grad;
@@ -282,8 +282,8 @@ void StVKTet::prox( VecX &zi ) {
 double StVKTet::energy( const VecX &F_ ) {
 	Matrix<double,9,1> Fcopy = F_;
 	Matrix<double,3,3> F = Map<Matrix<double,3,3> >(Fcopy.data());
-	Vec3 S; Mat3 U, Vt;
-	signed_svd( F, S, U, Vt );
+	Vec3 S; Mat3 U, V;
+	signed_svd( F, S, U, V );
 	problem.x0 = S;
 	if( S[2] < 0.0 ){ S[2] = -S[2]; }
 	return problem.value(S)*volume;
@@ -295,8 +295,8 @@ double StVKTet::gradient( const VecX &F_, VecX &grad ) {
 	if( grad.rows() != 3 ){
 		throw std::runtime_error("**StVKTet::gradient Error: grad not dim 3");
 	}
-	Vec3 S; Mat3 U, Vt;
-	signed_svd( F, S, U, Vt );
+	Vec3 S; Mat3 U, V;
+	signed_svd( F, S, U, V );
 	problem.x0 = S;
 	if( S[2] < 0.0 ){ S[2] = -S[2]; }
 	Vec3 g = grad;

@@ -46,6 +46,7 @@ namespace helper {
 
 void WindForce::project( double dt, VectorXd &x, VectorXd &v, VectorXd &m ) const {
 	(void)(m);
+
 	// ANIMATION AERODYNAMICS (1991)
 	// Wejchert and Haumann
 

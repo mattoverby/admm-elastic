@@ -26,10 +26,12 @@
 #ifndef ADMM_FASTSVD_H
 #define ADMM_FASTSVD_H 1
 
+#include <Eigen/Dense>
+
 // Relevent papers:
+// Computing the Singular Value Decomposition of 3x3 matrices with minimal branching and elementary floating point operations, McAdams et al.
 // Energetically Consistent Invertible Elasticity, Stomakhin et al.
 // Invertible Finite Elements For Robust Simulation of Large Deformation, Irving et al.
-// Maybe use physbam implementation, which I think is pretty fast... 
 
 namespace admm {
 	namespace fsvd {
@@ -37,7 +39,7 @@ namespace admm {
 		template <typename T> using Mat3 = Eigen::Matrix<T,3,3>;
 	}
 
-	// Projection, Singular Values, SVD's U, SVD's V transpose
+	// Projection, Singular Values, SVD's U, SVD's V
 	template <typename T>
 	static inline void signed_svd( const fsvd::Mat3<T> &F, fsvd::Vec3<T> &S, fsvd::Mat3<T> &U, fsvd::Mat3<T> &V ){
 		using namespace Eigen;

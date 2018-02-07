@@ -27,8 +27,8 @@ namespace admm {
 
 //
 // Uzawa Solver for saddle point system
-// [ A  C* ] [ x ] = [ b ]
-// [ C  0  ] [ y ] = [ c ]
+// [ A  C^T ] [ x ] = [ b ]
+// [ C  0   ] [ y ] = [ c ]
 //
 class UzawaCG : public LinearSolver {
 public:
@@ -64,6 +64,13 @@ public:
 		const SparseMat &C = constraints->m_C;
 		const SparseMat &Ct = constraints->m_Ct;
 		const VecX &c = constraints->m_c;
+
+		// Usually the lagrange mults y get reset here.
+		// In the odd case they don't that means we didn't
+		// resolve the collisions last ADMM iteration (didn't converge).
+		// We can warm start with the previous mults, and that
+		// should help resolve it this time. This should rarely happen,
+		// unless you're reducing the number if iters too much.
 		if( y.rows() != C.rows() ){ y = VecX::Zero(c.rows()); }
 
 		// If there are no constraints, just use the
@@ -84,10 +91,14 @@ public:
 		int iter = 0;
 		for( ; iter<max_iters; ++iter ){
 
+			// Intermediate variables instead of computing
+			// full Schur compliment:
 			q1 = Ct*d;
 			q2 = cholesky->solve( q1 );
 			q3 = C*q2;
 
+			// I don't typically hit denominator
+			// problems here, but sometimes it shows up...
 			double denom = d.dot(q3);
 			if( is_zero(denom) ){ break; }
 			double alpha = d.dot(r) / denom;

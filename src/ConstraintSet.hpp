@@ -64,7 +64,7 @@ inline void ConstraintSet::make_matrix( int dof, bool add_passive_collisions, bo
 	// Get constraint info
 	int n_p_hits = add_passive_collisions ? collider->passive_hits.size() : 0;
 	int n_d_hits = add_dynamic_collisions ? collider->dynamic_hits.size() : 0;
-	double ck = std::max(0.0,constraint_w);
+	double ck = std::sqrt(std::max(0.0,constraint_w));
 	int c_rows = n_p_hits + n_d_hits;
 	if( row_per_node ){ c_rows = dof/3; }
 	std::vector<double> constrained( dof/3, 0.f );

@@ -242,7 +242,7 @@ bool Solver::initialize( const Settings &settings_ ){
 		} break;
 		case 1: {
 			m_linsolver = std::make_shared<NodalMultiColorGS>( NodalMultiColorGS(m_constraints) );
-			m_constraints->constraint_w = std::sqrt(m_W_diag.maxCoeff()*3.0);
+			m_constraints->constraint_w = m_W_diag.maxCoeff()*3.0;
 		} break;
 		case 2: {
 			m_linsolver = std::make_shared<UzawaCG>( UzawaCG(m_constraints) );
@@ -285,6 +285,7 @@ bool Solver::Settings::parse_args( int argc, char **argv ){
 		else if( arg == "-g" ){ val >> gravity; }
 		else if( arg == "-r" ){ record_obj = true; }
 		else if( arg == "-ls" ){ val >> linsolver; }
+		else if( arg == "-ck" ){ val >> constraint_w; }
 	}
 
 	// Check if last arg is one of our no-param args
