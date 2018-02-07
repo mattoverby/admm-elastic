@@ -97,8 +97,11 @@ void Solver::step(){
 		}
 		m_runtime.local_ms += t.elapsed_ms();
 
+		// Collision detection, which also updates the BVHs and stuff
+		t.reset();
 		m_constraints->collider->clear_hits();
 		m_constraints->collider->detect( surface_inds, curr_x, detect_passive );
+		m_runtime.collision_ms += t.elapsed_ms();
 
 		// Global step
 		t.reset();
@@ -301,7 +304,8 @@ void Solver::Settings::help(){
 		"\t-it: # admm iters\n" <<
 		"\t-g: gravity (m/s^2)\n" <<
 		"\t-r: record objective value \n" <<
-		"\t-ls: linear solver (0=LDLT, 1=NCMCGS) \n" <<
+		"\t-ls: linear solver (0=LDLT, 1=NCMCGS, 2=UzawaCG) \n" <<
+		"\t-ck: constraint weights (-1 = auto) \n" <<
 	"==========================================\n";
 	printf( "%s", ss.str().c_str() );
 }
@@ -309,8 +313,10 @@ void Solver::Settings::help(){
 void Solver::RuntimeData::print( const Settings &settings ){
 	std::cout << "\nTotal global step: " << global_ms << "ms";;
 	std::cout << "\nTotal local step: " << local_ms << "ms";
+	std::cout << "\nTotal collision update: " << collision_ms << "ms";
 	std::cout << "\nAvg global step: " << global_ms/double(settings.admm_iters) << "ms";;
 	std::cout << "\nAvg local step: " << local_ms/double(settings.admm_iters) << "ms";
+	std::cout << "\nAvg collision update: " << collision_ms/double(settings.admm_iters) << "ms";
 	std::cout << "\nADMM Iters: " << settings.admm_iters;
 	std::cout << "\nAvg Inner Iters: " << float(inner_iters) / float(settings.admm_iters);
 	std::cout << std::endl;

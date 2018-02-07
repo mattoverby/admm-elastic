@@ -43,7 +43,7 @@ public:
 		int verbose;		// -v <int>	terminal output level (higher=more)
 		int admm_iters;		// -it <int>	number of admm solver iterations
 		double gravity;		// -g <flt>	force of gravity
-		bool record_obj;	// -r		computes (and prints if verbose) objective value
+		bool record_obj;	// -r		computes objective value each iteration
 		int linsolver;		// -ls <int>	0=LDLT, 1=NCMCGS
 		double constraint_w;	// -ck <flt>	constraint weights (-1 = auto)
 		Settings() : timestep_s(1.0/24.0), verbose(1), admm_iters(10),
@@ -55,9 +55,10 @@ public:
 	struct RuntimeData {
 		double global_ms; // total ms for global solver
 		double local_ms; // total ms for local solver
+		double collision_ms; // total ms for collision update/detection
 		int inner_iters; // total global step iterations
 		std::vector<double> f, g; // objective values
-		RuntimeData() : global_ms(0), local_ms(0), inner_iters(0) {}
+		RuntimeData() : global_ms(0), local_ms(0), collision_ms(0), inner_iters(0) {}
 		void print( const Settings &settings );
 	};
 

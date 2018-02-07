@@ -35,6 +35,10 @@ public:
 	std::shared_ptr<Collider> collider;
 	std::unordered_map<int,Vec3> pins; // index -> location
 
+	// C and c may not be the correct size unless make_matrix is called.
+	SparseMat m_C, m_Ct;
+	VecX m_c;
+
 	ConstraintSet() : constraint_w(1.0) {
 		collider = std::make_shared<Collider>(Collider());
 	}
@@ -45,31 +49,12 @@ public:
 	// collider->detect to update collisions.
 	inline void make_matrix( int dof, bool add_passive_collisions, bool add_dynamic_collisions );
 
-	// Return the contraint matrix and solution vector. If dof differs from the cached
-	// matrix (m_C, m_c) then an empty constraint matrix is created.
-	inline void get_matrix( int dof, SparseMat &C, VecX &c );
-
-private:
-	SparseMat m_C;
-	VecX m_c;
-
 }; // end class linear solver
 
 
 //
 // Implementation
 //
-
-
-inline void ConstraintSet::get_matrix( int dof, SparseMat &C, VecX &c ){
-	if( m_C.cols() != dof ){
-		m_C.resize(1,dof);
-		m_c = VecX::Zero(1);
-	}
-	C = m_C;
-	c = m_c;
-}
-
 
 inline void ConstraintSet::make_matrix( int dof, bool add_passive_collisions, bool add_dynamic_collisions ){
 
@@ -126,6 +111,8 @@ inline void ConstraintSet::make_matrix( int dof, bool add_passive_collisions, bo
 
 	m_C.resize( c_rows, dof );
 	m_C.setFromTriplets( triplets.begin(), triplets.end() );
+	m_C.makeCompressed();
+	m_Ct = m_C.transpose();
 }
 
 

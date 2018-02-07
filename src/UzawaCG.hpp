@@ -61,7 +61,9 @@ public:
 		// Make constraint matrix if needed
 		int dof = A.cols();
 		constraints->make_matrix(dof,true,true);
-		constraints->get_matrix(dof,C,c);
+		const SparseMat &C = constraints->m_C;
+		const SparseMat &Ct = constraints->m_Ct;
+		const VecX &c = constraints->m_c;
 		if( y.rows() != C.rows() ){ y = VecX::Zero(c.rows()); }
 
 		// If there are no constraints, just use the
@@ -71,7 +73,6 @@ public:
 			return 1;
 		}
 
-		SparseMat Ct = C.transpose();
 		VecX q1 = b0 - Ct*y;
 		x = cholesky->solve( q1 );
 
@@ -85,8 +86,8 @@ public:
 
 			q1 = Ct*d;
 			q2 = cholesky->solve( q1 );
-
 			q3 = C*q2;
+
 			double denom = d.dot(q3);
 			if( is_zero(denom) ){ break; }
 			double alpha = d.dot(r) / denom;
@@ -114,8 +115,7 @@ public:
 
 private:
 	VecX y; // lagrange mults
-	SparseMat A, C;
-	VecX c;
+	SparseMat A;
 
 };
 

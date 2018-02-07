@@ -84,16 +84,7 @@ set( RENDER_LIBS
 #
 ############################################################
 
-add_subdirectory( ${CMAKE_CURRENT_SOURCE_DIR}/samples )
-
 enable_testing()
-
-add_executable(test_lineartet samples/tests/test_lineartet.cpp)
-target_link_libraries(test_lineartet admmelastic)
-add_test(test_lineartet test_lineartet)
-
-add_executable(test_ncmcgs samples/tests/test_ncmcgs.cpp)
-target_link_libraries(test_ncmcgs admmelastic)
-add_test(test_ncmcgs test_ncmcgs)
+add_subdirectory( ${CMAKE_CURRENT_SOURCE_DIR}/samples )
 
 
