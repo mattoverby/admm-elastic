@@ -7,7 +7,7 @@ University of Minnesota
 
 Materials from the TVCG paper will be added incrementally (samples/constraints/etc...)
 
-If you'd like to run examples from our original SCA paper (that aren't implemented in this repo yet) check out the [earlier release](http://github.com/mattoverby/admm-elastic/releases/tag/v0.1-sca).
+If you'd like to see examples from our original SCA paper (that haven't been implemented in this repo yet), take a look at the [other github repository](https://github.com/mattoverby/admm-elastic-sca).
 
 # notes
 
