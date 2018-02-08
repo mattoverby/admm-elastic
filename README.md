@@ -5,7 +5,7 @@
 [Jie Li](http://www-users.cs.umn.edu/~lixx4611/) and [Rahul Narain](http://rahul.narain.name/)  
 University of Minnesota
 
-Materials from the TVCG paper will be added incrementally (samples/solvers/etc...)
+Materials from the TVCG paper will be added incrementally (samples/constraints/etc...)
 
 If you'd like to run examples from our original SCA paper (that aren't implemented in this repo yet) check out the [earlier release](http://github.com/mattoverby/admm-elastic/releases/tag/v0.1-sca).
 
