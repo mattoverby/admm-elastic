@@ -22,6 +22,7 @@ and has the dependences:
 
 Todo:
 - [Stable Neo-Hookean](http://graphics.pixar.com/library/StableElasticity)
+- [Spline hyperelastics](https://dl.acm.org/citation.cfm?id=2766917)
 - Slide constraints
 - Bending force
 - 1D reduction matrix with nx3 vars (x and v)
