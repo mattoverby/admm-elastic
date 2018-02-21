@@ -1,6 +1,6 @@
 // Copyright (c) 2017, University of Minnesota
 // 
-// lbfgssolver Uses the BSD 2-Clause License (http://www.opensource.org/licenses/BSD-2-Clause)
+// ADMM-Elastic Uses the BSD 2-Clause License (http://www.opensource.org/licenses/BSD-2-Clause)
 // Redistribution and use in source and binary forms, with or without modification, are
 // permitted provided that the following conditions are met:
 // 1. Redistributions of source code must retain the above copyright notice, this list of
