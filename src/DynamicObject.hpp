@@ -32,6 +32,7 @@ class TetMeshCollision : public DynamicCollision {
 private:
 	mcl::bvh::AABBTree<float,3> m_faces_tree;
 	mcl::bvh::AABBTree<double,4> m_tets_tree;
+
 	int vert_offset;
 	std::vector<mcl::Vec4i> mesh_tets;
 	std::vector<mcl::Vec3i> mesh_faces;

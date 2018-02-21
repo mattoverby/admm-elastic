@@ -18,8 +18,9 @@
 // OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #ifndef ADMM_TETENERGYTERM_H
-#define ADMM_TETENERGYTERM_H 1
+#define ADMM_TETENERGYTERM_H
 
+#include "XuSpline.hpp"
 #include "EnergyTerm.hpp"
 #include "MCL/Newton.hpp"
 #include "MCL/LBFGS.hpp"
@@ -79,7 +80,6 @@ public:
 
 }; // end class TetEnergyTerm
 
-
 //
 //	Neo-Hookean Tet
 //
@@ -116,7 +116,6 @@ public:
 	public:
 		double mu, lambda, k;
 		Vec3 x0;
-		void init( double mu_, double lam_, Vec3 x0_ );
 		double energy_density(const Vec3 &x) const;
 		double value(const Vec3 &x);
 		double gradient(const Vec3 &x, Vec3 &grad);
@@ -129,6 +128,41 @@ public:
 	mcl::optlib::LBFGS<double,3> solver;
 
 	StVKTet( const Vec4i &tet_, const std::vector<Vec3> &verts, const Lame &lame_ );
+	void prox( VecX &zi );
+	double energy( const VecX &F );
+	double gradient( const VecX &F, VecX &grad );
+};
+
+
+
+//
+//	Spline Tet:
+// 	Nonlinear Material Design Using Principal Stretches (2015)
+//	Hongyi Xu, Funshing Sin, Yufeng Zhu, Jernej Barbic
+//
+class SplineTet : public TetEnergyTerm {
+public:
+	// The actual proximal objective function we are minimizing in the
+	// local step (subject to a quadratic constraint for ADMM coupling constraint)
+	typedef Eigen::Matrix<double,3,3> Mat3;
+	class SplineProx : public mcl::optlib::Problem<double,3> {
+	public:
+		Vec3 x0;
+		double k;
+		std::shared_ptr<xu::Spline> spline;
+		double energy_density(const Vec3 &x) const;
+		double value(const Vec3 &x);
+		double gradient(const Vec3 &x, Vec3 &grad);
+		bool converged(const Vec3 &x0, const Vec3 &x1, const Vec3 &grad){
+			return ( grad.norm() < 1e-6 || (x0-x1).norm() < 1e-6 );
+		}
+	} problem;
+	mcl::optlib::LBFGS<double,3> solver;
+
+	// Defaults to NeoHookean if this constructor is used.
+	SplineTet( const Vec4i &tet_, const std::vector<Vec3> &verts, const Lame &lame_ );
+	SplineTet( const Vec4i &tet_, const std::vector<Vec3> &verts, const Lame &lame_,
+		std::shared_ptr<xu::Spline> spline );
 	void prox( VecX &zi );
 	double energy( const VecX &F );
 	double gradient( const VecX &F, VecX &grad );

@@ -24,8 +24,8 @@
 // Classes/functions used by admm-elastic samples
 //
 
-#ifndef ADMM_COMMON_H
-#define ADMM_COMMON_H
+#ifndef ADMM_ADDMESHES_H
+#define ADMM_ADDMESHES_H
 
 #include "MCL/MeshIO.hpp"
 #include "MCL/ShapeFactory.hpp"
@@ -35,6 +35,9 @@
 #include "TriEnergyTerm.hpp"
 #include "Solver.hpp"
 
+//
+//	TODO revise
+//
 
 // Glue code to couple admm-elastic with mclscene data types
 namespace binding {

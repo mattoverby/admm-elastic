@@ -271,6 +271,14 @@ bool Solver::initialize( const Settings &settings_ ){
 } // end init
 
 
+void Solver::save_matrix( const std::string &filename ){
+
+	std::cout << "Saving matrix (" << solver_termA.rows() << "x" <<
+		solver_termA.cols() << ") to " << filename << std::endl;
+	std::ofstream(filename.c_str()) << solver_termA;
+}
+
+
 template<typename T> void myclamp( T &val, T min, T max ){ if( val < min ){ val = min; } if( val > max ){ val = max; } }
 bool Solver::Settings::parse_args( int argc, char **argv ){
 

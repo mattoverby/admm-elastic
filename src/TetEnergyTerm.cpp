@@ -143,7 +143,6 @@ double NeoHookeanTet::NHProx::gradient(const Vec3 &x, Vec3 &grad){
 	return value(x);
 }
 
-
 NeoHookeanTet::NeoHookeanTet( const Vec4i &tet_, const std::vector<Eigen::Vector3d> &verts, const Lame &lame_ ) :
 	TetEnergyTerm( tet_, verts, lame_ ){
 
@@ -305,4 +304,93 @@ double StVKTet::gradient( const VecX &F_, VecX &grad ) {
 	return e;
 }
 
+double SplineTet::SplineProx::energy_density(const Vec3 &x) const {
+	return spline->f(x[0]) + spline->f(x[1]) + spline->f(x[2]) +
+		spline->g(x[0]*x[1]) + spline->g(x[1]*x[2]) + spline->g(x[2]*x[0]) +
+		spline->h(x[0]*x[1]*x[2]); 
+}
+
+double SplineTet::SplineProx::value(const Vec3 &x){
+	if( x[0]<0.0 || x[1]<0.0 || x[2]<0.0 ){
+		// No Mr. Linesearch, you have gone too far!
+		return std::numeric_limits<float>::max();
+	}
+	double t1 = energy_density(x); // U(Dx)
+	double t2 = (k*0.5) * (x-x0).squaredNorm(); // quad penalty
+	return t1 + t2;
+}
+
+double SplineTet::SplineProx::gradient(const Vec3 &x, Vec3 &grad){
+	double hprime = spline->dh(x[0]*x[1]*x[2]);
+	grad[0] = spline->df(x[0]) + spline->dg(x[0]*x[1])*x[1] + spline->dg(x[2]*x[0])*x[2] + hprime*x[1]*x[2] + k*(x[0]-x0[0]);
+	grad[1] = spline->df(x[1]) + spline->dg(x[1]*x[2])*x[2] + spline->dg(x[0]*x[1])*x[0] + hprime*x[2]*x[0] + k*(x[1]-x0[1]);
+	grad[2] = spline->df(x[2]) + spline->dg(x[2]*x[0])*x[0] + spline->dg(x[1]*x[2])*x[1] + hprime*x[0]*x[1] + k*(x[2]-x0[2]);
+	return value(x);
+}
+
+SplineTet::SplineTet( const Vec4i &tet_, const std::vector<Vec3> &verts, const Lame &lame_ ) :
+	TetEnergyTerm( tet_, verts, lame_ ){
+	double k = lame.bulk_modulus();
+	weight = std::sqrt(k*volume);
+	problem.k = k;
+	problem.spline = std::make_shared<xu::NeoHookean>( lame.mu,lame.lambda,0.0 );
+}
+
+SplineTet::SplineTet( const Vec4i &tet_, const std::vector<Vec3> &verts, const Lame &lame_,
+	std::shared_ptr<xu::Spline> spline ) :
+	TetEnergyTerm( tet_, verts, lame_ ){
+	double k = lame.bulk_modulus();
+	weight = std::sqrt(k*volume);
+	problem.k = k;
+	problem.spline = spline;
+}
+
+void SplineTet::prox( VecX &zi ){
+	typedef Matrix<double,9,1> Vec9;
+	typedef Matrix<double,3,3> Mat3;
+
+	Mat3 F = Map<Mat3>(zi.data());
+	Vec3 S; Mat3 U, V;
+	signed_svd( F, S, U, V );
+	problem.x0 = S;
+
+	// If everything is very low, It is collapsed to a point and the minimize
+	// will likely fail. So we'll just inflate it a bit.
+	const double eps = 1e-6;
+	if( std::abs(S[0]) < eps && std::abs(S[1]) < eps && std::abs(S[2]) < eps ){
+		S[0] = eps; S[1] = eps; S[2] = eps;
+	}
+
+	if( S[2] < 0.0 ){ S[2] = -S[2]; }
+
+	solver.minimize( problem, S );
+	Mat3 matp = U * S.asDiagonal() * V.transpose();
+	zi = Map<Vec9>(matp.data());
+}
+
+double SplineTet::energy( const VecX &F_ ){
+	Matrix<double,9,1> Fcopy = F_;
+	Matrix<double,3,3> F = Map<Matrix<double,3,3> >(Fcopy.data());
+	Vec3 S; Mat3 U, V;
+	signed_svd( F, S, U, V );
+	problem.x0 = S;
+	if( S[2] < 0.0 ){ S[2] = -S[2]; }
+	return problem.value(S)*volume;
+}
+
+double SplineTet::gradient( const VecX &F_, VecX &grad ){
+	Matrix<double,9,1> Fcopy = F_;
+	Matrix<double,3,3> F = Map<Matrix<double,3,3> >(Fcopy.data());
+	if( grad.rows() != 3 ){
+		throw std::runtime_error("**StVKTet::gradient Error: grad not dim 3");
+	}
+	Vec3 S; Mat3 U, V;
+	signed_svd( F, S, U, V );
+	problem.x0 = S;
+	if( S[2] < 0.0 ){ S[2] = -S[2]; }
+	Vec3 g = grad;
+	double e = problem.gradient(S,g)*volume;
+	grad = g;
+	return e;
+}
 

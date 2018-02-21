@@ -99,6 +99,9 @@ public:
 	// Returns the runtime data from the last time step.
 	virtual const RuntimeData &runtime_data(){ return m_runtime; }
 
+	// Outputs solver_termA to a file (for debugging/analysis).
+	virtual void save_matrix( const std::string &filename );
+
 	// Returns the current settings
 	const Settings &settings(){ return m_settings; }
 
