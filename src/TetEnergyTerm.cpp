@@ -107,6 +107,64 @@ double TetEnergyTerm::gradient( const VecX &F, VecX &grad ) {
 }
 
 //
+//	HyperElasticTet implementation
+//
+
+void HyperElasticTet::prox( VecX &zi ){
+	typedef Matrix<double,9,1> Vec9;
+	typedef Matrix<double,3,3> Mat3;
+	Prox *problem = get_problem();
+
+	Mat3 F = Map<Mat3>(zi.data());
+	Vec3 S; Mat3 U, V;
+	signed_svd( F, S, U, V );
+	problem->set_x0(S);
+
+	// If everything is very low, It is collapsed to a point and the minimize
+	// will likely fail. So we'll just inflate it a bit.
+	const double eps = 1e-6;
+	if( std::abs(S[0]) < eps && std::abs(S[1]) < eps && std::abs(S[2]) < eps ){
+		S[0] = eps; S[1] = eps; S[2] = eps;
+	}
+
+	if( S[2] < 0.0 ){ S[2] = -S[2]; }
+
+	solver.minimize( *problem, S );
+	Mat3 matp = U * S.asDiagonal() * V.transpose();
+	zi = Map<Vec9>(matp.data());
+}
+
+double HyperElasticTet::energy( const VecX &F_ ){
+	typedef Matrix<double,3,3> Mat3;
+	Prox *problem = get_problem();
+	Matrix<double,9,1> Fcopy = F_;
+	Matrix<double,3,3> F = Map<Matrix<double,3,3> >(Fcopy.data());
+	Vec3 S; Mat3 U, V;
+	signed_svd( F, S, U, V );
+	problem->set_x0(S);
+	if( S[2] < 0.0 ){ S[2] = -S[2]; }
+	return problem->value(S)*volume;
+}
+
+double HyperElasticTet::gradient( const VecX &F_, VecX &grad ){
+	typedef Matrix<double,3,3> Mat3;
+	Prox *problem = get_problem();
+	Matrix<double,9,1> Fcopy = F_;
+	Matrix<double,3,3> F = Map<Matrix<double,3,3> >(Fcopy.data());
+	if( grad.rows() != 3 ){
+		throw std::runtime_error("**HyperElasticTet::gradient Error: grad not dim 3");
+	}
+	Vec3 S; Mat3 U, V;
+	signed_svd( F, S, U, V );
+	problem->set_x0(S);
+	if( S[2] < 0.0 ){ S[2] = -S[2]; }
+	Vec3 g = grad;
+	double e = problem->gradient(S,g)*volume;
+	grad = g;
+	return e;
+}
+
+//
 //	NeoHookean
 //
 
@@ -143,71 +201,6 @@ double NeoHookeanTet::NHProx::gradient(const Vec3 &x, Vec3 &grad){
 	return value(x);
 }
 
-NeoHookeanTet::NeoHookeanTet( const Vec4i &tet_, const std::vector<Eigen::Vector3d> &verts, const Lame &lame_ ) :
-	TetEnergyTerm( tet_, verts, lame_ ){
-
-	double k = lame.bulk_modulus();
-	weight = std::sqrt(k*volume);
-
-	problem.mu = lame.mu;
-	problem.lambda = lame.lambda;
-	problem.k = k;
-}
-
-void NeoHookeanTet::prox( VecX &zi ) {
-
-	typedef Matrix<double,9,1> Vec9;
-	typedef Matrix<double,3,3> Mat3;
-
-	Mat3 F = Map<Mat3>(zi.data());
-	Vec3 S; Mat3 U, V;
-	signed_svd( F, S, U, V );
-	problem.x0 = S;
-
-	// If everything is very low, It is collapsed to a point and the minimize
-	// will likely fail. So we'll just inflate it a bit.
-	const double eps = 1e-6;
-	if( std::abs(S[0]) < eps && std::abs(S[1]) < eps && std::abs(S[2]) < eps ){
-		S[0] = eps; S[1] = eps; S[2] = eps;
-	}
-
-	if( S[2] < 0.0 ){ S[2] = -S[2]; }
-	solver.minimize( problem, S );
-
-	Mat3 matp = U * S.asDiagonal() * V.transpose();
-	zi = Map<Vec9>(matp.data());
-
-}
-
-double NeoHookeanTet::energy( const VecX &F_ ) {
-	Matrix<double,9,1> Fcopy = F_;
-	Matrix<double,3,3> F = Map<Matrix<double,3,3> >(Fcopy.data());
-	Vec3 S; Mat3 U, V;
-	signed_svd( F, S, U, V );
-	problem.x0 = S;
-	if( S[2] < 0.0 ){ S[2] = -S[2]; }
-	return problem.value(S)*volume;
-}
-
-double NeoHookeanTet::gradient( const VecX &F_, VecX &grad ) {
-	Matrix<double,9,1> Fcopy = F_;
-	Matrix<double,3,3> F = Map<Matrix<double,3,3> >(Fcopy.data());
-	if( grad.rows() != 3 ){
-		throw std::runtime_error("**NeoHookeanTet::gradient Error: grad not dim 3");
-	}
-	Vec3 S; Mat3 U, V;
-	signed_svd( F, S, U, V );
-	problem.x0 = S;
-	if( S[2] < 0.0 ){ S[2] = -S[2]; }
-	Vec3 g = grad;
-	double e = problem.gradient(S,g)*volume;
-	grad = g;
-	return e;
-}
-
-
-
-
 //
 //	St Venant-Kirchhoff
 //
@@ -230,7 +223,6 @@ double StVKTet::StVKProx::energy_density(const Vec3 &x) const {
 	return r;
 }
 
-
 double StVKTet::StVKProx::gradient(const Vec3 &x, Vec3 &grad){
 	Vec3 term1(
 		mu * x[0]*(x[0]*x[0] - 1.0),
@@ -242,67 +234,9 @@ double StVKTet::StVKProx::gradient(const Vec3 &x, Vec3 &grad){
 	return value(x);
 }
 
-StVKTet::StVKTet( const Vec4i &tet_, const std::vector<Eigen::Vector3d> &verts, const Lame &lame_ ) :
-	TetEnergyTerm( tet_, verts, lame_ ){
-
-	double k = lame.bulk_modulus();
-	weight = std::sqrt(k*volume);
-
-	problem.mu = lame.mu;
-	problem.lambda = lame.lambda;
-	problem.k = k;
-}
-
-void StVKTet::prox( VecX &zi ) {
-
-	typedef Matrix<double,9,1> Vec9;
-	typedef Matrix<double,3,3> Mat3;
-
-	Mat3 F = Map<Mat3>(zi.data());
-	Vec3 S; Mat3 U, V;
-	signed_svd( F, S, U, V );
-	problem.x0 = S;
-
-	// If everything is very low, It is collapsed to a point and the minimize
-	// will likely fail. So we'll just inflate it a bit.
-	const double eps = 1e-6;
-	if( std::abs(S[0]) < eps && std::abs(S[1]) < eps && std::abs(S[2]) < eps ){
-		S[0] = eps; S[1] = eps; S[2] = eps;
-	}
-
-	if( S[2] < 0.0 ){ S[2] = -S[2]; }
-
-	solver.minimize( problem, S );
-	Mat3 matp = U * S.asDiagonal() * V.transpose();
-	zi = Map<Vec9>(matp.data());
-
-}
-
-double StVKTet::energy( const VecX &F_ ) {
-	Matrix<double,9,1> Fcopy = F_;
-	Matrix<double,3,3> F = Map<Matrix<double,3,3> >(Fcopy.data());
-	Vec3 S; Mat3 U, V;
-	signed_svd( F, S, U, V );
-	problem.x0 = S;
-	if( S[2] < 0.0 ){ S[2] = -S[2]; }
-	return problem.value(S)*volume;
-}
-
-double StVKTet::gradient( const VecX &F_, VecX &grad ) {
-	Matrix<double,9,1> Fcopy = F_;
-	Matrix<double,3,3> F = Map<Matrix<double,3,3> >(Fcopy.data());
-	if( grad.rows() != 3 ){
-		throw std::runtime_error("**StVKTet::gradient Error: grad not dim 3");
-	}
-	Vec3 S; Mat3 U, V;
-	signed_svd( F, S, U, V );
-	problem.x0 = S;
-	if( S[2] < 0.0 ){ S[2] = -S[2]; }
-	Vec3 g = grad;
-	double e = problem.gradient(S,g)*volume;
-	grad = g;
-	return e;
-}
+//
+//	Spline Tets
+//
 
 double SplineTet::SplineProx::energy_density(const Vec3 &x) const {
 	return spline->f(x[0]) + spline->f(x[1]) + spline->f(x[2]) +
@@ -328,69 +262,4 @@ double SplineTet::SplineProx::gradient(const Vec3 &x, Vec3 &grad){
 	return value(x);
 }
 
-SplineTet::SplineTet( const Vec4i &tet_, const std::vector<Vec3> &verts, const Lame &lame_ ) :
-	TetEnergyTerm( tet_, verts, lame_ ){
-	double k = lame.bulk_modulus();
-	weight = std::sqrt(k*volume);
-	problem.k = k;
-	problem.spline = std::make_shared<xu::NeoHookean>( lame.mu,lame.lambda,0.0 );
-}
-
-SplineTet::SplineTet( const Vec4i &tet_, const std::vector<Vec3> &verts, const Lame &lame_,
-	std::shared_ptr<xu::Spline> spline ) :
-	TetEnergyTerm( tet_, verts, lame_ ){
-	double k = lame.bulk_modulus();
-	weight = std::sqrt(k*volume);
-	problem.k = k;
-	problem.spline = spline;
-}
-
-void SplineTet::prox( VecX &zi ){
-	typedef Matrix<double,9,1> Vec9;
-	typedef Matrix<double,3,3> Mat3;
-
-	Mat3 F = Map<Mat3>(zi.data());
-	Vec3 S; Mat3 U, V;
-	signed_svd( F, S, U, V );
-	problem.x0 = S;
-
-	// If everything is very low, It is collapsed to a point and the minimize
-	// will likely fail. So we'll just inflate it a bit.
-	const double eps = 1e-6;
-	if( std::abs(S[0]) < eps && std::abs(S[1]) < eps && std::abs(S[2]) < eps ){
-		S[0] = eps; S[1] = eps; S[2] = eps;
-	}
-
-	if( S[2] < 0.0 ){ S[2] = -S[2]; }
-
-	solver.minimize( problem, S );
-	Mat3 matp = U * S.asDiagonal() * V.transpose();
-	zi = Map<Vec9>(matp.data());
-}
-
-double SplineTet::energy( const VecX &F_ ){
-	Matrix<double,9,1> Fcopy = F_;
-	Matrix<double,3,3> F = Map<Matrix<double,3,3> >(Fcopy.data());
-	Vec3 S; Mat3 U, V;
-	signed_svd( F, S, U, V );
-	problem.x0 = S;
-	if( S[2] < 0.0 ){ S[2] = -S[2]; }
-	return problem.value(S)*volume;
-}
-
-double SplineTet::gradient( const VecX &F_, VecX &grad ){
-	Matrix<double,9,1> Fcopy = F_;
-	Matrix<double,3,3> F = Map<Matrix<double,3,3> >(Fcopy.data());
-	if( grad.rows() != 3 ){
-		throw std::runtime_error("**StVKTet::gradient Error: grad not dim 3");
-	}
-	Vec3 S; Mat3 U, V;
-	signed_svd( F, S, U, V );
-	problem.x0 = S;
-	if( S[2] < 0.0 ){ S[2] = -S[2]; }
-	Vec3 g = grad;
-	double e = problem.gradient(S,g)*volume;
-	grad = g;
-	return e;
-}
 

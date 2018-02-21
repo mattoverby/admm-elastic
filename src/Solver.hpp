@@ -39,7 +39,7 @@ public:
 	struct Settings {
 		bool parse_args( int argc, char **argv ); // parse from terminal args. Returns true if help()
 		void help();		// -help	print details, parse_args returns true if used
-		double timestep_s;	// -dt <flt>	timestep in seconds (don't change after initialize!)
+		double timestep_s;	// -dt <flt>	timestep in seconds
 		int verbose;		// -v <int>	terminal output level (higher=more)
 		int admm_iters;		// -it <int>	number of admm solver iterations
 		double gravity;		// -g <flt>	force of gravity

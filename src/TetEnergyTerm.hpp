@@ -80,26 +80,30 @@ public:
 
 }; // end class TetEnergyTerm
 
+
 //
-//	Neo-Hookean Tet
+//	HyperElastic Tet base class
 //
-class NeoHookeanTet : public TetEnergyTerm {
+class HyperElasticTet : public TetEnergyTerm {
 public:
 	typedef Eigen::Matrix<double,3,3> Mat3;
-	class NHProx : public mcl::optlib::Problem<double,3> {
+	class Prox : public mcl::optlib::Problem<double,3> {
 	public:
-		double mu, lambda, k;
-		Vec3 x0;
-		double energy_density(const Vec3 &x) const;
-		double value(const Vec3 &x);
-		double gradient(const Vec3 &x, Vec3 &grad);
-		bool converged(const Vec3 &x0, const Vec3 &x1, const Vec3 &grad){
+		virtual void set_x0(const Vec3 x0_)=0; // set x0 (quad penalty)
+		virtual bool converged(const Vec3 &x0, const Vec3 &x1, const Vec3 &grad){
 			return ( grad.norm() < 1e-6 || (x0-x1).norm() < 1e-6 );
 		}
-	} problem;
+	};
 	mcl::optlib::LBFGS<double,3> solver;
 
-	NeoHookeanTet( const Vec4i &tet_, const std::vector<Vec3> &verts, const Lame &lame_ );
+	// Returns a pointer to the local problem (constitutive model)
+	virtual Prox* get_problem()=0;
+
+	// Sets some default values for weight
+	HyperElasticTet( const Vec4i &tet_, const std::vector<Vec3> &verts, const Lame &lame_ ) :
+		TetEnergyTerm(tet_,verts,lame_) {}
+
+	// Local step on the problem returned from get_problem
 	void prox( VecX &zi );
 	double energy( const VecX &F );
 	double gradient( const VecX &F, VecX &grad );
@@ -107,30 +111,56 @@ public:
 
 
 //
-//	St-VK Tet
+//	NeoHookean Tet
 //
-class StVKTet : public TetEnergyTerm {
+class NeoHookeanTet : public HyperElasticTet {
 public:
-	typedef Eigen::Matrix<double,3,3> Mat3;
-	class StVKProx : public mcl::optlib::Problem<double,3> {
+	class NHProx : public HyperElasticTet::Prox {
 	public:
 		double mu, lambda, k;
 		Vec3 x0;
+		void set_lame(const Lame &lame){
+			mu = lame.mu;
+			lambda = lame.lambda;
+			k = lame.bulk_modulus();
+		}
+		void set_x0(const Vec3 x0_){ x0=x0_; }
+		double energy_density(const Vec3 &x) const;
+		double value(const Vec3 &x);
+		double gradient(const Vec3 &x, Vec3 &grad);
+	} problem;
+
+	Prox* get_problem(){ return &problem; }
+	NeoHookeanTet( const Vec4i &tet_, const std::vector<Vec3> &verts, const Lame &lame_ ) :
+		HyperElasticTet(tet_,verts,lame_) { problem.set_lame(lame_); }
+};
+
+
+//
+//	St-VK Tet
+//
+class StVKTet : public HyperElasticTet {
+public:
+	class StVKProx : public HyperElasticTet::Prox {
+	public:
+		double mu, lambda, k;
+		Vec3 x0;
+		void set_lame(const Lame &lame){
+			mu = lame.mu;
+			lambda = lame.lambda;
+			k = lame.bulk_modulus();
+		}
+		void set_x0(const Vec3 x0_){ x0=x0_; }
 		double energy_density(const Vec3 &x) const;
 		double value(const Vec3 &x);
 		double gradient(const Vec3 &x, Vec3 &grad);
 		static inline double ddot( Vec3 &a, Vec3 &b ) { return (a*b.transpose()).trace(); }
 		static inline double v3trace( const Vec3 &v ) { return v[0]+v[1]+v[2]; }
-		bool converged(const Vec3 &x0, const Vec3 &x1, const Vec3 &grad){
-			return ( grad.norm() < 1e-6 || (x0-x1).norm() < 1e-6 );
-		}
 	} problem;
-	mcl::optlib::LBFGS<double,3> solver;
 
-	StVKTet( const Vec4i &tet_, const std::vector<Vec3> &verts, const Lame &lame_ );
-	void prox( VecX &zi );
-	double energy( const VecX &F );
-	double gradient( const VecX &F, VecX &grad );
+	Prox* get_problem(){ return &problem; }
+	StVKTet( const Vec4i &tet_, const std::vector<Vec3> &verts, const Lame &lame_ ) :
+		HyperElasticTet(tet_,verts,lame_) { problem.set_lame(lame_); }
 };
 
 
@@ -140,32 +170,36 @@ public:
 // 	Nonlinear Material Design Using Principal Stretches (2015)
 //	Hongyi Xu, Funshing Sin, Yufeng Zhu, Jernej Barbic
 //
-class SplineTet : public TetEnergyTerm {
+class SplineTet : public HyperElasticTet {
 public:
 	// The actual proximal objective function we are minimizing in the
 	// local step (subject to a quadratic constraint for ADMM coupling constraint)
-	typedef Eigen::Matrix<double,3,3> Mat3;
-	class SplineProx : public mcl::optlib::Problem<double,3> {
+	class SplineProx : public HyperElasticTet::Prox {
 	public:
 		Vec3 x0;
 		double k;
 		std::shared_ptr<xu::Spline> spline;
+		void set_x0(const Vec3 x0_){ x0=x0_; }
 		double energy_density(const Vec3 &x) const;
 		double value(const Vec3 &x);
 		double gradient(const Vec3 &x, Vec3 &grad);
-		bool converged(const Vec3 &x0, const Vec3 &x1, const Vec3 &grad){
-			return ( grad.norm() < 1e-6 || (x0-x1).norm() < 1e-6 );
-		}
 	} problem;
-	mcl::optlib::LBFGS<double,3> solver;
+
+	Prox* get_problem(){ return &problem; }
 
 	// Defaults to NeoHookean if this constructor is used.
-	SplineTet( const Vec4i &tet_, const std::vector<Vec3> &verts, const Lame &lame_ );
+	SplineTet( const Vec4i &tet_, const std::vector<Vec3> &verts, const Lame &lame_ ) :
+		HyperElasticTet( tet_, verts, lame_ ) {
+		problem.k = lame_.bulk_modulus();
+		problem.spline = std::make_shared<xu::NeoHookean>( lame.mu,lame.lambda,0.0 );
+	}
+
 	SplineTet( const Vec4i &tet_, const std::vector<Vec3> &verts, const Lame &lame_,
-		std::shared_ptr<xu::Spline> spline );
-	void prox( VecX &zi );
-	double energy( const VecX &F );
-	double gradient( const VecX &F, VecX &grad );
+		std::shared_ptr<xu::Spline> spline ) :
+		HyperElasticTet( tet_, verts, lame_ ){
+		problem.k = lame_.bulk_modulus();
+		problem.spline = spline;
+	}
 };
 
 
