@@ -24,6 +24,9 @@
 #include <Eigen/SparseCholesky>
 #include <unordered_map>
 #include <memory>
+#ifdef EIGEN_USE_MKL_VML
+#include <Eigen/PardisoSupport>
+#endif
 
 namespace admm {
 
@@ -58,7 +61,12 @@ public:
 	typedef Eigen::Matrix<double,3,1> Vec3;
 	typedef Eigen::Matrix<double,Eigen::Dynamic,1> VecX;
 	typedef Eigen::SparseMatrix<double,Eigen::RowMajor> SparseMat;
+
+	#ifdef EIGEN_USE_MKL_VML
+	typedef Eigen::PardisoLDLT< Eigen::SparseMatrix<double> > Cholesky;
+	#else
 	typedef Eigen::SimplicialLDLT< Eigen::SparseMatrix<double> > Cholesky;
+	#endif
 
 	SparseMat A;
 	std::unique_ptr<Cholesky> m_cholesky;

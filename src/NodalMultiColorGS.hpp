@@ -79,7 +79,7 @@ public:
 		std::vector< std::vector<int> > colors;
 		if( has_collisions ){
 			const SparseMat &Ct = constraints->m_Ct;
-			AplusCtC += Ct*C;
+			AplusCtC += (SparseMat)(Ct*C);
 			b += Ct*c;
 			AplusCtC.makeCompressed();
 			mcl::graphcolor::color_matrix<double>( AplusCtC, colors, 3 );

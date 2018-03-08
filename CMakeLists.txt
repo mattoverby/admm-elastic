@@ -27,16 +27,28 @@ endif()
 #
 ############################################################
 
+# Keep a variable of linked libs and link at end
+set(LINKED_LIBS "")
+
 # OpenMP
 find_package(OpenMP)
 if(OPENMP_FOUND)
-	set (CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${OpenMP_C_FLAGS}")
-	set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${OpenMP_CXX_FLAGS}")
+	set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${OpenMP_C_FLAGS}")
+	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${OpenMP_CXX_FLAGS}")
+	set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${OpenMP_EXE_LINKER_FLAGS}")
+endif()
+
+# Intel MKL (for Pardiso)
+find_package(MKL)
+if(MKL_FOUND)
+	include_directories(${MKL_INCLUDE_DIRS})
+	set(LINKED_LIBS "${LINKED_LIBS};${MKL_LIBRARIES}")
+	add_definitions(-DEIGEN_USE_MKL_VML)
 endif()
 
 # Eigen3 (header only)
+set(EIGEN3_INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/deps/Eigen3")
 #find_package(Eigen3 REQUIRED)
-set(EIGEN3_INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/deps/Eigen3" )
 include_directories(SYSTEM ${EIGEN3_INCLUDE_DIR})
 
 # mcloptlib (header only), submodule in deps/
@@ -63,6 +75,7 @@ include_directories(SYSTEM ${OPENGL_INCLUDE_DIR})
 # Add project sources
 include_directories( ${CMAKE_CURRENT_SOURCE_DIR}/src )
 set( ADMMELASTIC_SRCS
+#	src/PardisoKKT.cpp
 	src/Solver.cpp
 	src/ExplicitForce.cpp
 	src/TetEnergyTerm.cpp
@@ -71,7 +84,7 @@ set( ADMMELASTIC_SRCS
 
 # Finally, create the library
 add_library( admmelastic ${ADMMELASTIC_SRCS} )
-link_libraries( admmelastic ${MCLSCENE_LIBRARIES} )
+link_libraries( admmelastic ${LINKED_LIBS} )
 set( RENDER_LIBS 
 	${OPENGL_LIBRARIES}
 	${GLEW_LIBRARIES}
