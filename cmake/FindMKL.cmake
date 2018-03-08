@@ -26,7 +26,7 @@ if(NOT MKL_ROOT)
 	set(MKL_ROOT "/opt/intel/mkl")
 endif()
 
-if(NOT THREADING)
+if(NOT MKL_THREADING)
 	set(MKL_THREADING "sequential")
 endif()
 

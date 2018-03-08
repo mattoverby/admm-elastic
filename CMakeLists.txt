@@ -39,11 +39,14 @@ if(OPENMP_FOUND)
 endif()
 
 # Intel MKL (for Pardiso)
+set(MKL_THREADING "sequential")
 find_package(MKL)
 if(MKL_FOUND)
 	include_directories(${MKL_INCLUDE_DIRS})
 	set(LINKED_LIBS "${LINKED_LIBS};${MKL_LIBRARIES}")
-	add_definitions(-DEIGEN_USE_MKL_VML)
+	add_definitions(-DEIGEN_USE_MKL_ALL)
+else()
+	message("MKL not found, using Eigen solvers")
 endif()
 
 # Eigen3 (header only)
@@ -85,6 +88,9 @@ set( ADMMELASTIC_SRCS
 # Finally, create the library
 add_library( admmelastic ${ADMMELASTIC_SRCS} )
 link_libraries( admmelastic ${LINKED_LIBS} )
+
+# TODO check for WHATEVER_FOUND and don't
+# compile rendered samples if libs not found.
 set( RENDER_LIBS 
 	${OPENGL_LIBRARIES}
 	${GLEW_LIBRARIES}
