@@ -78,7 +78,6 @@ include_directories(SYSTEM ${OPENGL_INCLUDE_DIR})
 # Add project sources
 include_directories( ${CMAKE_CURRENT_SOURCE_DIR}/src )
 set( ADMMELASTIC_SRCS
-#	src/PardisoKKT.cpp
 	src/Solver.cpp
 	src/ExplicitForce.cpp
 	src/TetEnergyTerm.cpp
