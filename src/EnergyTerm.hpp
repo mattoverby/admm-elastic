@@ -150,10 +150,7 @@ inline double EnergyTerm::gradient( const SparseMat &D, const VecX &x, VecX &gra
 	int dof = x.rows();
 	int dim = get_dim();
 	VecX Dix = D.block(g_index,0,dim,dof)*x;
-	VecX gradi = grad.segment(g_index,dim);
-	double e = gradient( Dix, gradi );
-	grad.segment(g_index,dim) = gradi;
-	return e;
+	return gradient( Dix, grad );
 }
 
 
