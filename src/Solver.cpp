@@ -79,16 +79,6 @@ void Solver::step(){
 	int s_i = 0;
 	for( ; s_i < m_settings.admm_iters; ++s_i ){
 
-		if( m_settings.record_obj ){
-			VecX Msqrt = m_masses.cwiseSqrt();
-			VecX resid = 0.5 * (1.0/dt) * Msqrt.asDiagonal() * (curr_x - x_bar);
-			double fx = resid.squaredNorm();
-			double gx = 0.0;
-			for( int i=0; i<n_energyterms; ++i ){ gx += energyterms[i]->energy( m_D, curr_x ); }
-			m_runtime.f.emplace_back( fx );
-			m_runtime.g.emplace_back( gx );
-		} // end record obj
-
 		// Local step
 		t.reset();
 		#pragma omp parallel for num_threads(n_threads)
@@ -291,7 +281,6 @@ bool Solver::Settings::parse_args( int argc, char **argv ){
 		else if( arg == "-v" ){ val >> verbose; }	
 		else if( arg == "-it" ){ val >> admm_iters; }
 		else if( arg == "-g" ){ val >> gravity; }
-		else if( arg == "-r" ){ record_obj = true; }
 		else if( arg == "-ls" ){ val >> linsolver; }
 		else if( arg == "-ck" ){ val >> constraint_w; }
 	}
@@ -299,7 +288,6 @@ bool Solver::Settings::parse_args( int argc, char **argv ){
 	// Check if last arg is one of our no-param args
 	std::string arg( argv[argc-1] );
 	if( arg == "-help" || arg == "--help" || arg == "-h" ){ help(); return true; }
-	else if( arg == "-r" ){ record_obj = true; }
 
 	return false;
 
@@ -312,7 +300,6 @@ void Solver::Settings::help(){
 		"\t-v: verbosity (higher -> show more)\n" <<
 		"\t-it: # admm iters\n" <<
 		"\t-g: gravity (m/s^2)\n" <<
-		"\t-r: record objective value \n" <<
 		"\t-ls: linear solver (0=LDLT, 1=NCMCGS, 2=UzawaCG) \n" <<
 		"\t-ck: constraint weights (-1 = auto) \n" <<
 	"==========================================\n";
