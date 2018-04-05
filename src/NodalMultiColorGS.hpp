@@ -90,7 +90,6 @@ public:
 		double b_norm = 1.0;
 		double tol2 = m_tol*m_tol;
 		if( m_tol > 0 ){ b_norm = b.squaredNorm(); }
-		const int max_threads = omp_get_max_threads();
 
 		// Outer iteration loop
 		int iter = 0;
@@ -102,12 +101,9 @@ public:
 
 				const std::vector<int> &inds = colors[color];
 				const int n_inds = inds.size();
+				bool use_threads = n_inds > 31; // tunable, not sure what's best
 
-				// Only use threads if we have a large number of indices in
-				// the color, otherwise the threading overhead is a waste.
-				const int n_threads = n_inds < max_threads ? 1 : max_threads;
-
-				#pragma omp parallel for num_threads(n_threads)
+				#pragma omp parallel for if (use_threads)
 				for( int i=0; i<n_inds; ++i ){
 					int idx = inds[i];
 
