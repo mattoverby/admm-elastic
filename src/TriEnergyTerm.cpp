@@ -82,6 +82,12 @@ void TriEnergyTerm::prox( VecX &zi ){
 	Vector6d p = Map<Vector6d>(P.data());
 	zi = 0.5 * ( p + zi );
 
+	// If w^2 != k*volume, use this:
+//	double k = lame.bulk_modulus();
+//	double ka = k * area;
+//	double w2 = weight*weight;
+//	zi = (ka*p + w2*zi) / (w2 + ka);
+
 	const bool check_strain = lame.limit_min > 0.0 || lame.limit_max < 99.0;
 	if( check_strain ){
 		double l_col0 = zi.head<3>().norm();
@@ -103,9 +109,8 @@ double TriEnergyTerm::energy( const VecX &vecF ) {
 	Matrix<double,3,2> S = Matrix<double,3,2>::Zero();
 	S.block<2,2>(0,0) = Matrix<double,2,2>::Identity();
 	Matrix<double,3,2> P = svd.matrixU() * S * svd.matrixV().transpose();
-	double k = weight*weight;
-	double energy = k/2.0 * ( F - P ).squaredNorm();
-	return energy;
+	double k = lame.bulk_modulus();
+	return 0.5 * k * area * ( F - P ).squaredNorm();
 }
 
 

@@ -61,8 +61,8 @@ public:
 	void prox( VecX &zi ){ if( active ){ zi = pin; } }
 
 	double energy( const VecX &F ){
-		if( !active ){ return 0.0; }
-		return weight*(F-pin).norm(); // More useful than 0 and inf
+		(void)(F); // could use hookean spring energy, but not really accurate
+		throw std::runtime_error("**SpringPin Error: Energy not implemented");
 	}
 
 	double gradient( const VecX &F, VecX &grad ){

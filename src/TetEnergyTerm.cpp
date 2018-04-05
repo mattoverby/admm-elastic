@@ -43,8 +43,8 @@ TetEnergyTerm::TetEnergyTerm( const Vec4i &tet_, const std::vector<Vec3> &verts,
 		throw std::runtime_error("**TetEnergyTerm Error: Inverted initial tet");
 	}
 
-	double k = lame.bulk_modulus(); // projective dynamics weight
-	weight = std::sqrt(k*volume); // admm weight
+	double k = lame.bulk_modulus(); // a little stiffer than we usually want, but a fine approx.
+	weight = std::sqrt(k*volume); // admm weight. If you change this, see TetEnergyTerm::prox.
 }
 
 void TetEnergyTerm::get_reduction( std::vector< Eigen::Triplet<double> > &triplets ){
@@ -81,7 +81,14 @@ void TetEnergyTerm::prox( VecX &zi ){
 	Matrix<double,3,3> proj = svd.matrixU() * S.asDiagonal() * svd.matrixV().transpose();
 	Vector9d p = Map<Vector9d>(proj.data());
 	// Update zi
+	// Note, the below only works if w^2 = k*volume.
 	zi = 0.5 * ( p + zi );
+
+	// If w^2 != k*volume, use this:
+//	double k = lame.bulk_modulus();
+//	double kv = k * volume;
+//	double w2 = weight*weight;
+//	zi = (kv*p + w2*zi) / (w2 + kv);
 }
 
 double TetEnergyTerm::energy( const VecX &vecF ) {
@@ -89,14 +96,8 @@ double TetEnergyTerm::energy( const VecX &vecF ) {
 	Vector9d vecF_ = vecF; // data() function is non-const
 	Matrix<double,3,3> F = Map<Matrix<double,3,3> >(vecF_.data());
 	JacobiSVD< Matrix<double,3,3> > svd(F, ComputeFullU | ComputeFullV);
-	Vec3 S = Vec3::Ones();
-	// Flip last singular value if inverted
-	if( F.determinant() < 0.f ){ S[2] = -1.0; }
-	// Project onto constraint
-	Matrix<double,3,3> P = svd.matrixU() * S.asDiagonal() * svd.matrixV().transpose();
-	double k = weight*weight;  // projective dynamics weight
-	double energy = k/2.0 * ( F - P ).squaredNorm();
-	return energy;
+	double k = lame.bulk_modulus();
+	return 0.5 * k * volume * ( svd.singularValues() - Vec3::Ones() ).squaredNorm();
 }
 
 double TetEnergyTerm::gradient( const VecX &F, VecX &grad ) {
@@ -143,6 +144,7 @@ double HyperElasticTet::energy( const VecX &F_ ){
 	signed_svd( F, S, U, V );
 	problem->set_x0(S);
 	if( S[2] < 0.0 ){ S[2] = -S[2]; }
+	// Excludes ADMM penalty since x = x0
 	return problem->value(S)*volume;
 }
 
