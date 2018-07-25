@@ -5,7 +5,7 @@
 [Jie Li](http://www-users.cs.umn.edu/~lixx4611/) and [Rahul Narain](http://rahul.narain.name/)  
 University of Minnesota
 
-Materials from the TVCG paper will be added incrementally (samples/constraints/etc...)
+This paper is an extended journal submission of the [original SCA paper](http://www-users.cs.umn.edu/~over0219/pages/admmpd_abstract.html). The new content improves the handling of contraints, primarily for contact and collision. The full code is not up yet, but materials from the TVCG paper will be added incrementally (samples/constraints/etc...)
 
 If you'd like to see examples from our original SCA paper (that haven't been implemented in this repo yet), take a look at the [other github repository](https://github.com/mattoverby/admm-elastic-sca).
 
