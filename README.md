@@ -1,6 +1,6 @@
 # admm-elastic
 
-[ADMM ⊇ Projective Dynamics: Fast Simulation of Hyperelastic Models with Dynamic Constraints](http://www-users.cs.umn.edu/~over0219/pages/admmpd_abstract.html)  
+[ADMM ⊇ Projective Dynamics: Fast Simulation of Hyperelastic Models with Dynamic Constraints](https://mattoverby.net/pages/admmpd_abstract.html)  
 [Matthew Overby](http://www.mattoverby.net/), [George E. Brown](http://www-users.cs.umn.edu/~brow2327/),
 [Jie Li](http://www-users.cs.umn.edu/~lixx4611/) and [Rahul Narain](http://rahul.narain.name/)  
 University of Minnesota
