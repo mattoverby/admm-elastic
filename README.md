@@ -24,7 +24,6 @@ Todo:
 - [Stable Neo-Hookean](http://graphics.pixar.com/library/StableElasticity)
 - Slide constraints
 - Bending force
-- 1D reduction matrix with nx3 vars (x and v)
 - Demos from SCA/TVCG papers
 - More unit tests
 
