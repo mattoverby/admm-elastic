@@ -43,7 +43,7 @@ int main(int argc, char **argv){
 	}
 
 	admm::Solver::Settings settings;
-	settings.linsolver = 2; // Uzawa
+	settings.linsolver = 1; // NCMCGS
 	if( settings.parse_args( argc, argv ) ){ return EXIT_SUCCESS; }
 	Application app(settings);
 
