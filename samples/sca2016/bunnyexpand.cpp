@@ -40,8 +40,9 @@ int main(int argc, char *argv[]){
 	tetfile << ADMMELASTIC_ROOT_DIR << "/samples/data/bunny_1124";
 	mcl::TetMesh::Ptr mesh = mcl::TetMesh::create();
 	mcl::meshio::load_elenode( mesh.get(), tetfile.str() );
-	mesh->flags |= binding::NOSELFCOLLISION | binding::STVK;
+//	mesh->flags |= binding::NOSELFCOLLISION | binding::STVK;
 //	mesh->flags |= binding::NOSELFCOLLISION | binding::LINEAR;
+	mesh->flags |= binding::NOSELFCOLLISION | binding::NEOHOOKEAN;
 
 	mcl::XForm<float> scale = mcl::xform::make_scale<float>(10.f,10.f,10.f);
 	mcl::XForm<float> rotate = mcl::xform::make_rot<float>(20.f,mcl::Vec3f(1,0,0));

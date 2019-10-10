@@ -59,11 +59,11 @@ public:
 
 	// Adds a deformable tet mesh
 	inline void add_dynamic_mesh( mcl::TetMesh::Ptr mesh,
-		const admm::Lame &lame = admm::Lame::rubber() );
+		const admm::Lame &lame = admm::Lame::soft_rubber() );
 
 	// Adds a deformable triangle mesh
 	inline void add_dynamic_mesh( mcl::TriangleMesh::Ptr mesh,
-		const admm::Lame &lame = admm::Lame::rubber() );
+		const admm::Lame &lame = admm::Lame::soft_rubber() );
 
 	// Obstacles aren't simulated, but act as collision objects.
 	inline void add_obstacle( std::shared_ptr<admm::PassiveCollision> c,
