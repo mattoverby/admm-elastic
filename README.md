@@ -64,4 +64,5 @@ cd build
 cmake ..
 make -j
 ./samples/sca2016/beams
+[press spacebar to start simulation]
 ```
