@@ -1,0 +1,30 @@
+name: Build and Test
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build_and_test:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: clone
+      uses: actions/checkout@v4
+
+    - name: dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y build-essential cmake libtbb-dev
+
+    - name: build
+      working-directory: ${{ github.workspace }} 
+      run: |
+        cmake -DADMMPD_UNIT_TESTS=ON -DADMMPD_EXAMPLES=OFF .
+        make -j
+
+    - name: test
+      working-directory: ${{ github.workspace }} 
+      run: make test
