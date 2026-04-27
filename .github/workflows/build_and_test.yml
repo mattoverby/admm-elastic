@@ -17,7 +17,7 @@ jobs:
     - name: dependencies
       run: |
         sudo apt-get update
-        sudo apt-get install -y build-essential cmake libtbb-dev
+        sudo apt-get install -y build-essential cmake libeigen3-dev libtbb-dev
 
     - name: build
       working-directory: ${{ github.workspace }} 
