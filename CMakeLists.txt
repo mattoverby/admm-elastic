@@ -1,109 +1,85 @@
-cmake_minimum_required(VERSION 2.6)
-project(admm-elastic C CXX)
+# Copyright Matt Overby 2025.
+# Distributed under the MIT License.
 
-############################################################
-#
-#	Build Options
-#
-############################################################
-
-set(CMAKE_CXX_STANDARD 11)
+cmake_minimum_required(VERSION 3.0)
+project(admmpd LANGUAGES CXX)
+set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
-set(CMAKE_BUILD_TYPE Release)
-set(CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake" ${CMAKE_MODULE_PATH})
+list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 
-file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/output")
-add_definitions(-DADMMELASTIC_OUTPUT_DIR="${CMAKE_CURRENT_BINARY_DIR}/output")
-add_definitions(-DADMMELASTIC_ROOT_DIR="${CMAKE_CURRENT_SOURCE_DIR}")
-option(MCL_BUILD_SAMPLES "Build mcl library samples" OFF)
+option(ADMMPD_DEBUG "compile in test mode" OFF)
+option(ADMMPD_EXAMPLES "compile visual examples" ON)
+option(ADMMPD_UNIT_TESTS "compile unit tests" ON)
+option(ADMMPD_STATIC_LIBRARY "compile as static library" ON)
 
-# Lots of warnings
-if(CMAKE_COMPILER_IS_GNUCC OR CMAKE_COMPILER_IS_GNUCXX)
-	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Wextra -Wno-long-long")
-endif()
-
-############################################################
-#
-#	Libraries
-#
-############################################################
-
-# Keep a variable of linked libs and link at end
-set(LINKED_LIBS "")
-
-# OpenMP
-find_package(OpenMP)
-if(OPENMP_FOUND)
-	set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${OpenMP_C_FLAGS}")
-	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${OpenMP_CXX_FLAGS}")
-	set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${OpenMP_EXE_LINKER_FLAGS}")
-endif()
-
-# Intel MKL (for Pardiso)
-set(MKL_THREADING "sequential")
-find_package(MKL)
-if(MKL_FOUND)
-	include_directories(${MKL_INCLUDE_DIRS})
-	set(LINKED_LIBS "${LINKED_LIBS};${MKL_LIBRARIES}")
-	add_definitions(-DEIGEN_USE_MKL_ALL)
+if (ADMMPD_DEBUG)
+	set(CMAKE_BUILD_TYPE Debug)
+	option(MCLGEOM_DISABLE_ASSERT "Disable mclAssert" OFF)
+	if(CMAKE_COMPILER_IS_GNUCC OR CMAKE_COMPILER_IS_GNUCXX)
+		set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Wundef -Wextra -Wno-long-long -Wlogical-op -Wshadow -Wmaybe-uninitialized -Wno-sign-compare")
+	endif()
 else()
-	message("MKL not found, using Eigen solvers")
+	if (NOT CMAKE_BUILD_TYPE)
+		set(CMAKE_BUILD_TYPE "Release")
+		option(MCLGEOM_DISABLE_ASSERT "Disable mclAssert" ON)
+	endif()
 endif()
 
-# Eigen3 (header only)
-set(EIGEN3_INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/deps/Eigen3")
-#find_package(Eigen3 REQUIRED)
-include_directories(SYSTEM ${EIGEN3_INCLUDE_DIR})
+# if not static, is header-only
+if (ADMMPD_STATIC_LIBRARY)
+	add_definitions(-DADMMPD_STATIC_LIBRARY)
+endif()
 
-# mcloptlib (header only), submodule in deps/
-set( MCLOPTLIB_DIR "${CMAKE_CURRENT_SOURCE_DIR}/deps/mcloptlib" )
-include_directories( ${MCLOPTLIB_DIR}/include )
+# thread building blocks for parallelization
+find_package(TBB REQUIRED)
 
-# mclscene (header only), submodule in deps/
-set( MCLSCENE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/deps/mclscene" )
-add_definitions( -DMCL_USE_GLEW )
-include_directories(SYSTEM ${MCLSCENE_DIR}/include )
+# mclgeom for geometry helpers
+include(mclgeom)
 
-# glfw3
-find_package(GLFW 3 REQUIRED)
-include_directories(SYSTEM ${GLFW_INCLUDE_DIR})
+# Create the library
+set(ADMMPD_INCLUDE
+	${CMAKE_CURRENT_SOURCE_DIR}/src/ADMMPD.hpp
+	${CMAKE_CURRENT_SOURCE_DIR}/src/Energies.hpp
+	${CMAKE_CURRENT_SOURCE_DIR}/src/MatrixTypes.hpp)
+set(ADMMPD_SRC
+	${CMAKE_CURRENT_SOURCE_DIR}/src/ADMMPD.cpp
+	${CMAKE_CURRENT_SOURCE_DIR}/src/Energies.cpp)
+add_library(${PROJECT_NAME} ${ADMMPD_INCLUDE} ${ADMMPD_SRC})
+target_link_libraries(${PROJECT_NAME} PUBLIC mcl::geom TBB::tbb)
+target_include_directories(${PROJECT_NAME} INTERFACE
+	$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src>)
+add_library(admmpd::core ALIAS ${PROJECT_NAME})
 
-# glew
-find_package(GLEW REQUIRED)
-include_directories(SYSTEM ${GLEW_INCLUDE_DIR})
+# build viewer tests
+if(ADMMPD_EXAMPLES)
+	include(libigl)
+	igl_include(glfw)
+	include(mclccd)
 
-# opengl
-find_package(OpenGL 3.2 REQUIRED)
-include_directories(SYSTEM ${OPENGL_INCLUDE_DIR})
+	# For mesh data
+	add_definitions(-DADMMPD_ROOT_DIR="${CMAKE_CURRENT_SOURCE_DIR}")
 
-# Add project sources
-include_directories( ${CMAKE_CURRENT_SOURCE_DIR}/src )
-set( ADMMELASTIC_SRCS
-	src/Solver.cpp
-	src/ExplicitForce.cpp
-	src/TetEnergyTerm.cpp
-	src/TriEnergyTerm.cpp
-)
+	add_executable(bunny ${CMAKE_CURRENT_SOURCE_DIR}/test/bunny.cpp)
+	target_link_libraries(bunny igl::glfw admmpd::core)
 
-# Finally, create the library
-add_library( admmelastic ${ADMMELASTIC_SRCS} )
-link_libraries( admmelastic ${LINKED_LIBS} )
+	add_executable(cloth ${CMAKE_CURRENT_SOURCE_DIR}/test/cloth.cpp)
+	target_link_libraries(cloth igl::glfw admmpd::core)
 
-# TODO check for WHATEVER_FOUND and don't
-# compile rendered samples if libs not found.
-set( RENDER_LIBS 
-	${OPENGL_LIBRARIES}
-	${GLEW_LIBRARIES}
-	${GLFW_LIBRARIES}
-)
+	add_executable(selfcollision ${CMAKE_CURRENT_SOURCE_DIR}/test/selfcollision.cpp)
+	target_link_libraries(selfcollision igl::glfw mcl::ccd admmpd::core)
 
-############################################################
-#
-#	Binaries
-#
-############################################################
+	add_executable(dillo ${CMAKE_CURRENT_SOURCE_DIR}/test/dillo.cpp)
+	target_link_libraries(dillo igl::glfw admmpd::core)
+endif()
 
-enable_testing()
-add_subdirectory( ${CMAKE_CURRENT_SOURCE_DIR}/samples )
+# unit testing (WIP)
+if(ADMMPD_UNIT_TESTS)
+    enable_testing()
+    add_executable(unit_tests ${CMAKE_CURRENT_SOURCE_DIR}/test/unit_tests.cpp)
+    target_link_libraries(unit_tests PUBLIC admmpd::core)
+    add_test(NAME unit_testing COMMAND unit_tests)
+endif()
 
-
+# install
+install(TARGETS ${PROJECT_NAME} DESTINATION lib)
+install(FILES ${ADMMPD_INCLUDE} DESTINATION include/ADMMPD)
